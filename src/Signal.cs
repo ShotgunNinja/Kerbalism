@@ -377,6 +377,8 @@ public class Signal : MonoBehaviour
   // - during scene changes the vessel list change asynchronously, but is synched every frame, apparently
   public void Update()
   {
+    if (RemoteTech.isEnabled()) return;
+    
     // get existing antennas
     BuildAntennas();
 
@@ -439,8 +441,19 @@ public class Signal : MonoBehaviour
     // if, for some reasons, there isn't link data for the vessel, return 'no antenna'
     // note: this for example may happen when a resque mission vessel get enabled
     link_data ld;
-    if (!instance.links.TryGetValue(v.id, out ld)) ld.status = link_status.no_antenna;
 
+    if (!instance.links.TryGetValue(v.id, out ld))
+    {
+      if (RemoteTech.isEnabled())
+      {
+        ld.linked = true;
+        ld.status = link_status.direct_link;
+      }
+      else {
+        ld.status = link_status.no_antenna;
+      }
+    }
+      
     // return link status from the cache
     return ld;
   }

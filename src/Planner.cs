@@ -436,7 +436,10 @@ public class Planner
     ec.consumed += oxygen.scrubber_cost;
 
     // include relay cost for the best relay antenna
-    ec.consumed += signal.relay_cost;
+    if (!RemoteTech.isEnabled())
+    {
+      ec.consumed += signal.relay_cost;
+    }
 
     // finally, calculate life expectancy of ec
     ec.life_expectancy_sunlight = ec.storage / Math.Max(ec.consumed - ec.generated_sunlight, 0.0);
@@ -604,7 +607,10 @@ public class Planner
       qol.time_to_instability = bonus / Settings.StressedDegradationRate;
       List<string> factors = new List<string>();
       if (crew.count > 1) factors.Add("not-alone");
-      if (signal.range > 0.0) factors.Add("call-home");
+      if (!RemoteTech.isEnabled())
+      {
+        if (signal.range > 0.0) factors.Add("call-home");
+      }
       if (env.landed) factors.Add("firm-ground");
       if (factors.Count == 0) factors.Add("none");
       qol.factors = String.Join(", ", factors.ToArray());
@@ -690,7 +696,10 @@ public class Planner
     double antenna_redundancy = signal.second_best_range > 0.0 ? signal.second_best_range / signal.range : 0.0;
     List<string> redundancies = new List<string>();
     if (ec_redundancy >= 0.5) redundancies.Add("ec");
-    if (antenna_redundancy >= 0.99) redundancies.Add("antenna");
+    if (!RemoteTech.isEnabled())
+    {
+      if (antenna_redundancy >= 0.99) redundancies.Add("antenna");
+    }
     if (redundancies.Count == 0) redundancies.Add("none");
     reliability.redundancy = String.Join(", ", redundancies.ToArray());
 
@@ -1024,7 +1033,9 @@ public class Planner
         // render
         render_radiation(radiation, env, crew);
         render_reliability(reliability, crew);
-        render_signal(signal, env, crew);
+        if (!RemoteTech.isEnabled()) {
+            render_signal(signal, env, crew);
+        }
         render_environment(env);
       }
     }

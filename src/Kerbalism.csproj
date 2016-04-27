@@ -84,6 +84,7 @@
     <Compile Include="EVA.cs" />
     <Compile Include="GravityRing.cs" />
     <Compile Include="Info.cs" />
+    <Compile Include="RemoteTech.cs" />
     <Compile Include="SCANsat.cs" />
     <Compile Include="Hooks.cs" />
     <Compile Include="Malfunction.cs" />
@@ -109,6 +110,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>xcopy Z:\kspmod\Kerbalism\Kerbalism\obj\Release\Kerbalism.dll C:\Games\KSP\GameData\Kerbalism\ /y</PostBuildEvent>
+    <PostBuildEvent>xcopy $(ProjectDir)obj\Release\Kerbalism.dll C:\Games\KSP\GameData\Kerbalism\ /y</PostBuildEvent>
   </PropertyGroup>
 </Project>
