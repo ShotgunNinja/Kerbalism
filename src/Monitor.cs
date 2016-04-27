@@ -441,7 +441,10 @@ public class Monitor
     GUILayout.Label(indicator_ec(v), icon_style);
     GUILayout.Label(indicator_supplies(v, vi), icon_style);
     GUILayout.Label(indicator_reliability(v), icon_style);
-    GUILayout.Label(indicator_signal(v), icon_style);
+    if (!RemoteTech.isEnabled())
+    {
+      GUILayout.Label(indicator_signal(v), icon_style);
+    }
     GUILayout.EndHorizontal();
     if (Lib.IsClicked(1)) Info.Toggle(v);
 
