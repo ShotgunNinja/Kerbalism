@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 
@@ -119,7 +120,30 @@ public class Signal : MonoBehaviour
     range_values.Add("far", (Sim.Apoapsis(home) + Sim.Apoapsis(far)) * 1.1);
     range_values.Add("extreme", (Sim.Apoapsis(home) + Sim.Apoapsis(far)) * 4.0);
     range_values.Add("medium", (range_values["near"] + range_values["far"]) * 0.5);
-  }
+
+    var scopes = GameDatabase
+      .Instance
+      .GetConfigNodes("KERBALISM")
+      .SelectMany(i => i.GetNodes("ANTENNA"))
+      .SelectMany(i => i.GetNodes("SCOPE"));
+
+    foreach (var scope in scopes)
+    {
+      var scopeName = (scope.GetValue("name") ?? string.Empty).Trim();
+      var scopeValueString = (scope.GetValue("value") ?? string.Empty).Trim();
+      double antennaScopeValue;
+
+      if (!string.IsNullOrEmpty(scopeName) && double.TryParse(scopeValueString, out antennaScopeValue))
+      {
+        range_values.Add(scopeName, antennaScopeValue);
+        Lib.Log(string.Format("Added custom antenna scope '{0}' with value of {1}", scopeName, antennaScopeValue));
+      }
+      else
+      {
+        Lib.Log(string.Format("Custom antenna scope was not in the correct format: {0}", scope));
+      }
+    }
+}
 
 
   // fill antennas data
@@ -458,7 +482,8 @@ public class Signal : MonoBehaviour
   // return range of an antenna
   static public double Range(string scope, double penalty, double ecc)
   {
-    return instance.range_values[scope] * penalty * ecc;
+    double range;
+    return instance.range_values.TryGetValue(scope, out range) ? range * penalty * ecc : 0;
   }
 
 
