@@ -118,6 +118,8 @@ public class Planner
     public double harvestTime;
     public double harvestSize;
 
+    public List<string> supplyRequires;
+
     // Set overrideable defaults passed to constructor
     public resource_data (
       double amount = 0.0, 
@@ -141,22 +143,28 @@ public class Planner
       this.hasGreenhouse = hasGreenhouse;
       this.harvestTime = harvestTime;
       this.harvestSize = harvestSize;
+      this.supplyRequires = new List<string>();
+    }
+
+    // Resource combination constructor
+    public resource_data (resource_data data1, resource_data data2)
+    {
+      amount = data1.amount + data2.amount;
+      capacity = data1.capacity + data2.capacity;
+      draw = data1.draw + data2.draw;
+      consumed = data1.consumed + data2.consumed;
+      produced = data1.produced + data2.produced;
+      hasScrubber = data1.hasScrubber || data2.hasScrubber;
+      hasRecycler = data1.hasRecycler || data2.hasRecycler;
+      hasGreenhouse = data1.hasGreenhouse || data2.hasGreenhouse;
+      harvestTime = Math.Max(data1.harvestTime, data2.harvestTime);
+      harvestSize = Math.Max(data1.harvestSize, data2.harvestSize);
+      this.supplyRequires = data1.supplyRequires.Union(data2.supplyRequires).ToList();
     }
 
     // Sum values of two sets of resource_data
     public static resource_data operator+(resource_data data1, resource_data data2){
-      resource_data dataSum = new resource_data (
-        amount: data1.amount + data2.amount, 
-        capacity: data1.capacity + data2.capacity,
-        draw: data1.draw + data2.draw,
-        consumed: data1.consumed + data2.consumed,
-        produced: data1.produced + data2.produced,
-        hasScrubber: data1.hasScrubber || data2.hasScrubber,
-        hasRecycler: data1.hasRecycler || data2.hasRecycler,
-        hasGreenhouse: data1.hasGreenhouse || data2.hasGreenhouse,
-        harvestTime: Math.Max(data1.harvestTime, data2.harvestTime),
-        harvestSize: Math.Max(data1.harvestSize, data2.harvestSize)
-      );       
+      resource_data dataSum = new resource_data(data1, data2);
       return dataSum;
     }
 
@@ -166,6 +174,21 @@ public class Planner
     public double? timeToEmpty(){
       double? timeLeft = null;
       if ((consumed - produced) > Double.Epsilon) timeLeft = amount / (consumed - produced); //If resource delta is negative, calculate time remaining until resource is exhausted. 
+      return timeLeft;
+    }
+
+    public double lifeTime(resource_collection resources, int n = 0){
+      double timeLeft = 0.0;
+      if (n > 3) return timeLeft; //If function has stepped through 4 resources each requiring the next, assume we're caught in a loop and break out.
+      if ((consumed - produced) > Double.Epsilon) timeLeft = amount / (consumed - produced); //If resource delta is negative, calculate time remaining until resource is exhausted. 
+      if (supplyRequires.Count > 0) {
+        timeLeft = amount / consumed; // Lifetime sans production, once dependency runs out.
+        double dependentTime = double.MaxValue;
+        foreach (string dependency in supplyRequires) {
+          dependentTime = Math.Min(dependentTime, resources[dependency].lifeTime(resources, n+1));
+        }
+        timeLeft += dependentTime;
+      }
       return timeLeft;
     }
   }
@@ -395,7 +418,7 @@ public class Planner
 
   // rate throttling
   float lastUpdateTime = 0;
-  float timeBetweenUpdates = 4; //4 seconds between background updates
+  float timeBetweenUpdates = 0.2f; //4 seconds between background updates
   bool updateNeeded;
 
   // styles
@@ -1096,7 +1119,10 @@ public class Planner
           if (!String.IsNullOrEmpty(recycler.filter_name)) resources.Add(recycler.filter_name); 
           if (!recycler.is_enabled) break; //If module not enabled, break out early
           resources[recycler.waste_name].draw += recycler.waste_rate;
-          if (!String.IsNullOrEmpty(recycler.filter_name)) resources[recycler.filter_name].draw += recycler.filter_rate;
+          if (!String.IsNullOrEmpty(recycler.filter_name)) {
+            resources[recycler.filter_name].draw += recycler.filter_rate;
+            resources[recycler.resource_name].supplyRequires.Add(recycler.filter_name);
+          }
           // Add transactions
           transaction.type = "Recycler";
           transaction.target = m;
@@ -1375,16 +1401,18 @@ public class Planner
     render_space();
   }
 
-  void render_resource(resource_data resource, Rule rule)
+  void render_resource(resource_collection resources, string name, Rule rule)
   {
+    resource_data resource = resources[name];
     render_title(rule.resource_name.ToUpper());
     render_content("storage", Lib.ValueOrNone(resource.capacity));
     render_content("consumed", Lib.HumanReadableRate(resource.consumed));
     if (resource.hasGreenhouse) render_content("greenhouse", String.Format("{0} every {1}", resource.harvestSize, Lib.HumanReadableDuration(resource.harvestTime)));
+    else if (resource.hasRecycler && resource.supplyRequires.Count > 0) render_content("recycled",  String.Format("{0}, req. filter.", Lib.HumanReadableRate(resource.produced)));
     else if (resource.hasRecycler) render_content("recycled", Lib.HumanReadableRate(resource.produced));
     else if (resource.hasScrubber) render_content("scrubbed", Lib.HumanReadableRate(resource.produced));
     else render_content("produced", Lib.HumanReadableRate(resource.produced));
-    render_content(rule.breakdown ? "time to instability" : "life expectancy", Lib.HumanReadableDuration(resource.amount / (resource.consumed - resource.produced)));
+    render_content(rule.breakdown ? "time to instability" : "life expectancy", Lib.HumanReadableDuration( resource.lifeTime(resources) ));
     render_space();
   }
 
@@ -1618,7 +1646,7 @@ public class Planner
 
       // resources (supplies replacement)
       foreach (Rule r in Kerbalism.supply_rules) {
-        if (panel_index / panels_per_page == page) render_resource(resources[r.resource_name], r);
+        if (panel_index / panels_per_page == page) render_resource(resources, r.resource_name, r);
         ++panel_index;
       }
 
