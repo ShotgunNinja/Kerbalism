@@ -180,7 +180,11 @@ public class Planner
     public double lifeTime(resource_collection resources, int n = 0){
       double timeLeft = 0.0;
       if (n > 3) return timeLeft; //If function has stepped through 4 resources each requiring the next, assume we're caught in a loop and break out.
-      if ((consumed - produced) > Double.Epsilon) timeLeft = amount / (consumed - produced); //If resource delta is negative, calculate time remaining until resource is exhausted. 
+      if ((consumed - produced) > Double.Epsilon) {
+        timeLeft = amount / (consumed - produced); //If resource delta is negative, calculate time remaining until resource is exhausted. 
+      } else {
+        timeLeft = double.NaN; //If resource delta is positive or zero, this resource should last indefinitely (barring dependency on some other resource with a limited lifetime.)
+      }
       if (supplyRequires.Count > 0) {
         timeLeft = amount / consumed; // Lifetime sans production, once dependency runs out.
         double dependentTime = double.MaxValue;
