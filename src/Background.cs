@@ -448,7 +448,7 @@ public sealed class Background
     double power = Lib.ReflectionValue<float>(radioisotope_generator, "BasePower");
     double mission_time = v.missionTime / (3600.0 * Lib.HoursInDay() * Lib.DaysInYear());
     double remaining = Math.Pow(2.0, (-mission_time) / half_life);
-    ec.Produce(power * remaining * elapsed_s);
+    ec.Produce(power * (Settings.RTGDecay ? remaining : 1.0) * elapsed_s);
   }
 
 
