@@ -48,6 +48,8 @@ public static class Settings
     DeathReputationPenalty      = Lib.ConfigValue(cfg, "DeathReputationPenalty",      50.0f);
     BreakdownReputationPenalty  = Lib.ConfigValue(cfg, "BreakdownReputationPenalty",  10.0f);
     MessageLength               = Lib.ConfigValue(cfg, "MessageLength",               6.66f);
+    AtmosphereDecay             = Lib.ConfigValue(cfg, "AtmosphereDecay",             true);
+    RTGDecay                    = Lib.ConfigValue(cfg, "RTGDecay",                    true);
   }
 
   // temperature
@@ -81,6 +83,8 @@ public static class Settings
   public static float  DeathReputationPenalty;            // reputation to remove in case of death
   public static float  BreakdownReputationPenalty;        // reputation to remove in case of breakdown
   public static float  MessageLength;                     // duration of messages on screen in seconds
+  public static float  AtmosphereDecay;                   // if true, orbits in the atmosphere will decay
+  public static float  RTGDecay;                          // if true, radioisotope thermoelectric generator output will decay
 }
 
 
