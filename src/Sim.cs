@@ -121,11 +121,10 @@ public static class Sim
   public static double TimeDilation(Vessel v)
   {
     if (!Settings.RelativisticTime) return 1.0;
-
     if (Lib.Landed(v)) return 1.0;
-
     double C = 299792458.0 * Settings.LightSpeedScale;
     double V = v.orbit.orbitalSpeed;
+    if (double.IsNaN(V) || double.IsInfinity(V)) return 1.0;
     return Math.Sqrt(1.0 - V * V / (C * C));
   }
 
@@ -425,8 +424,8 @@ public static class Sim
   // --------------------------------------------------------------------------
 
   // return proportion of flux not blocked by atmosphere
-  // note: while intuitively you are thinking to use this to calculate temperature inside an atmosphere,
-  //       understand that atmospheric climate is complex and the game is using float curves to approximate it
+  // - position: sampling point
+  // - sun_dir: normalized vector from sampling point to the sun
   public static double AtmosphereFactor(CelestialBody body, Vector3d position, Vector3d sun_dir)
   {
     // get up vector & altitude
@@ -455,6 +454,7 @@ public static class Sim
   // return proportion of flux not blocked by atmosphere
   // note: this one assume the receiver is on the ground
   // - cos_a: cosine of angle between zenith and sun, in [0..1] range
+  //          to get an average for stats purpose, use 0.7071
   public static double AtmosphereFactor(CelestialBody body, double cos_a)
   {
     double static_pressure = body.GetPressure(0.0);
@@ -492,14 +492,12 @@ public static class Sim
       double path = Math.Sqrt(Ra * Ra + 2.0 * Ra * Ya + Ya * Ya) - Ra;
       double factor = body.GetSolarPowerFactor(density) * Ya / path;
 
-      // ozone layer
-      if (body.atmosphereContainsOxygen) factor -= 0.42 * (1.0 - Lib.Clamp(altitude / body.atmosphereDepth, 0.0, 1.0));
-
-      // water vapor
-      if (body.ocean) factor -= 0.42 * (1.0 - Lib.Clamp(altitude / body.atmosphereDepth, 0.0, 1.0));
-
-      // totally non-physical
-      return Math.Max(0.0, factor);
+      // poor man atmosphere composition contribution
+      if (body.atmosphereContainsOxygen || body.ocean)
+      {
+        factor = 1.0 - Math.Pow(1.0 - factor, 0.015);
+      }
+      return factor;
     }
     return 1.0;
   }
