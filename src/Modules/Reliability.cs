@@ -1,150 +1,191 @@
-﻿// ===================================================================================================================
-// cause components to malfunction
-// ===================================================================================================================
-
-
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 
 namespace KERBALISM {
 
 
-public sealed class Reliability : PartModule
+public sealed class Reliability : PartModule, ISpecifics, IModuleInfo, IPartCostModifier, IPartMassModifier
 {
-  // config+persistence
-  [KSPField(isPersistant = true)] public string type = string.Empty;  // type of component
-
-
   // config
+  [KSPField(isPersistant = true)] public string type;                 // component name
   [KSPField] public double mtbf   = 21600000.0;                       // mean time between failures, in seconds
-  [KSPField] public string trait  = string.Empty;                     // trait required to repair, or empty if any trait can repair the component
-  [KSPField] public uint   level  = 0;                                // experience level required to repair
-  [KSPField] public string desc   = string.Empty;                     // short description of malfunction effect
-
+  [KSPField] public string repair = string.Empty;                     // repair crew specs
+  [KSPField] public string title  = string.Empty;                     // short description of component
+  [KSPField] public string redundancy = string.Empty;                 // redundancy group
+  [KSPField] public double extra_cost;                                // extra cost for high-quality, in proportion of part cost
+  [KSPField] public double extra_mass;                                // extra mass for high-quality, in proportion of part mass
 
   // persistence
-  [KSPField(isPersistant = true)] public uint   malfunctions;         // level of malfunction
-  [KSPField(isPersistant = true)] public double quality;              // manufacturing quality at time of launch
-  [KSPField(isPersistant = true)] public double epoch;                // epoch of next failure in seconds
-  [KSPField(isPersistant = true)] public double start;                // used to determine message on inspection
+  [KSPField(isPersistant = true)] public bool broken;                 // true if broken
+  [KSPField(isPersistant = true)] public bool critical;               // true if failure can't be repaired
+  [KSPField(isPersistant = true)] public bool quality;                // true if the component is high-quality
+  [KSPField(isPersistant = true)] public double last;                 // time of last failure
+  [KSPField(isPersistant = true)] public double next;                 // time of next failure
+
+  // status ui
+  [KSPField(guiActive = false, guiName = "_")] public string Status;  // show component status
+
+  // data
+  List<PartModule> modules;                                           // components cache
+  CrewSpecs repair_cs;                                                // crew specs
 
 
-  // show malfunction description
-  [KSPField(guiActive = false, guiName = "_")] public string Status;
 
-
-  // store the component
-  Component component;
-
-
-  // pseudo-ctor
   public override void OnStart(StartState state)
   {
     // do nothing in the editors and when compiling parts
-    if (!HighLogic.LoadedSceneIsFlight) return;
+    if (!Lib.IsFlight()) return;
+
+    // cache list of modules
+    modules = part.FindModulesImplementing<PartModule>().FindAll(k => k.moduleName == type);
+
+    // parse crew specs
+    repair_cs = new CrewSpecs(repair);
 
     // setup ui
-    Fields["Status"].guiName = type;
-    Events["Inspect"].guiName = Lib.BuildString("Inspect <i>(", type, ")</i>");
-    Events["Repair"].guiName = Lib.BuildString("Repair <i>(", type, ")</i>");
+    Fields["Status"].guiName = title;
+    Events["Inspect"].guiName = Lib.BuildString("Inspect <b>", title, "</b>");
+    Events["Repair"].guiName = Lib.BuildString("Repair <b>", title, "</b>");
 
-    // initialize the reliability component
-    switch(type)
+    // sync monobehaviour state with module state
+    // - required as the monobehaviour state is not serialized
+    if (broken)
     {
-      case "Engine": component = new EngineComponent(part.FindModulesImplementing<ModuleEngines>()); break;
-      case "Panel": component = new PanelComponent(part.FindModulesImplementing<ModuleDeployableSolarPanel>()); break;
-      case "Generator": component = new GeneratorComponent(part.FindModulesImplementing<ModuleGenerator>()); break;
-      case "Converter": component = new ConverterComponent(part.FindModulesImplementing<ModuleResourceConverter>()); break;
-      case "Harvester": component = new HarvesterComponent(part.FindModulesImplementing<ModuleResourceHarvester>()); break;
-      case "ReactionWheel": component = new ReactionWheelComponent(part.FindModulesImplementing<ModuleReactionWheel>()); break;
-      case "RCS": component = new RCSComponent(part.FindModulesImplementing<ModuleRCS>()); break;
-      case "Greenhouse": component = new GreenhouseComponent(part.FindModulesImplementing<Greenhouse>()); break;
-      case "GravityRing": component = new GravityRingComponent(part.FindModulesImplementing<GravityRing>()); break;
-      case "Emitter": component = new EmitterComponent(part.FindModulesImplementing<Emitter>()); break;
-      default: component = new UnknownComponent(); break;
+      foreach(PartModule m in modules)
+      {
+        m.enabled = false;
+      }
     }
 
-    // apply serialized malfunction
-    if (malfunctions > 0) component.Apply(Math.Pow(0.5, malfunctions));
+    // type-specific hacks
+    if (broken) apply(true);
   }
 
 
   public void Update()
   {
-    if (malfunctions == 1) Status = Lib.BuildString("<color=yellow>", desc, "</color>");
-    else if (malfunctions == 2) Status = Lib.BuildString("<color=red>", desc, "</color>");
-    Fields["Status"].guiActive = malfunctions > 0;
-    Events["Inspect"].active = malfunctions == 0;
-    Events["Repair"].active = malfunctions > 0;
-    SetHighlight(part);
+    if (Lib.IsFlight())
+    {
+      // enforce state
+      // - required as things like Configure or AnimationGroup can re-enable broken modules
+      if (broken)
+      {
+        foreach(PartModule m in modules)
+        {
+          m.enabled = false;
+          m.isEnabled = false;
+        }
+      }
+
+      // update ui
+      if (broken)
+      {
+        Status = !critical
+          ? "<color=yellow>Malfunction</color=yellow>"
+          : "<color=red>Critical failure</color>";
+      }
+      Fields["Status"].guiActive = broken;
+      Events["Inspect"].active = !broken;
+      Events["Repair"].active = repair_cs && broken && !critical;
+
+      // set highlight
+      highlight(part);
+    }
+    else
+    {
+      // update ui
+      string quality_label = part.FindModulesImplementing<Reliability>().Count > 1
+        ? Lib.BuildString("<b>", title, "</b> quality") : "Quality";
+      Events["Quality"].guiName = Lib.StatusToggle(quality_label, quality ? "high" : "standard");
+    }
   }
 
 
   public void FixedUpdate()
   {
     // do nothing in the editor
-    if (HighLogic.LoadedSceneIsEditor) return;
-
-    // do nothing until tech tree is ready
-    if (!Lib.TechReady()) return;
+    if (Lib.IsEditor()) return;
 
     // if it has not malfunctioned
-    if (malfunctions < 2)
+    if (!broken)
     {
-      // deduce quality from technological level if necessary
-      if (quality <= double.Epsilon)
+      // calculate time of next failure if necessary
+      if (next <= double.Epsilon)
       {
-        quality = DeduceQuality();
-      }
-
-      // calculate epoch of failure if necessary
-      if (epoch <= double.Epsilon)
-      {
-        start = Planetarium.GetUniversalTime();
-        epoch = start + mtbf * quality * 2.0 * Lib.RandomDouble();
+        last = Planetarium.GetUniversalTime();
+        next = last + mtbf * (quality ? Settings.QualityScale : 1.0) * 2.0 * Lib.RandomDouble();
       }
 
       // if it has failed, trigger malfunction
-      if (Planetarium.GetUniversalTime() > epoch) Break();
+      if (Planetarium.GetUniversalTime() > next) Break();
     }
   }
 
 
-  public static void BackgroundUpdate(Vessel v, ProtoPartModuleSnapshot m, Reliability reliability, double elapsed_s)
+  public static void BackgroundUpdate(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, Reliability reliability)
   {
     // if it has not malfunctioned
-    if (Lib.Proto.GetUInt(m, "malfunctions") < 2)
+    if (!Lib.Proto.GetBool(m, "broken"))
     {
-      // get epoch
-      double epoch = Lib.Proto.GetDouble(m, "epoch");
+      // get time of next failure
+      double next = Lib.Proto.GetDouble(m, "next");
+
+      // get quality
+      bool quality = Lib.Proto.GetBool(m, "quality");
 
       // calculate epoch of failure if necessary
-      if (epoch <= double.Epsilon)
+      if (next <= double.Epsilon)
       {
-        double quality = Lib.Proto.GetDouble(m, "quality", 1.0);
-        double start = Planetarium.GetUniversalTime();
-        epoch = start + reliability.mtbf * quality * 2.0 * Lib.RandomDouble();
-        Lib.Proto.Set(m, "start", start);
-        Lib.Proto.Set(m, "epoch", epoch);
+        double last = Planetarium.GetUniversalTime();
+        next = last + reliability.mtbf * (quality ? Settings.QualityScale : 1.0) * 2.0 * Lib.RandomDouble();
+        Lib.Proto.Set(m, "last", last);
+        Lib.Proto.Set(m, "next", next);
       }
 
       // if it has failed, trigger malfunction
-      if (Planetarium.GetUniversalTime() > epoch) Break(v, m);
+      if (Planetarium.GetUniversalTime() > next) ProtoBreak(v, p, m);
     }
+  }
+
+
+  // toggle between standard and high quality
+  [KSPEvent(guiActiveEditor = true, guiName = "_", active = true)]
+  public void Quality()
+  {
+    quality = !quality;
+
+    // sync all other modules in the symmetry group
+    foreach(Part p in part.symmetryCounterparts)
+    {
+      Reliability reliability = p.Modules[part.Modules.IndexOf(this)] as Reliability;
+      if (reliability != null)
+      {
+        reliability.quality = !reliability.quality;
+      }
+    }
+
+    // refresh VAB ui
+    GameEvents.onEditorShipModified.Fire(EditorLogic.fetch.ship);
   }
 
 
   // show a message with some hint on time to next failure
-  [KSPEvent(guiActiveUnfocused = true, guiName = "Inspect", active = false)]
+  [KSPEvent(guiActiveUnfocused = true, guiName = "_", active = false)]
   public void Inspect()
   {
+    // disable for dead eva kerbals
     Vessel v = FlightGlobals.ActiveVessel;
-    if (v == null || !v.isEVA || EVA.KerbalData(v).eva_dead) return;
+    if (v == null || EVA.IsDead(v)) return;
 
-    double time_k = (Planetarium.GetUniversalTime() - start) / (epoch - start);
+    // get normalized time to failure
+    double time_k = (Planetarium.GetUniversalTime() - last) / (next - last);
+
+    // notify user
     if (time_k < 0.2) Message.Post("It is practically new");
     else if (time_k < 0.4) Message.Post("It is still in good shape");
     else if (time_k < 0.6) Message.Post("It will keep working for some more time");
@@ -154,149 +195,356 @@ public sealed class Reliability : PartModule
 
 
   // repair malfunctioned component
-  [KSPEvent(guiActiveUnfocused = true, guiName = "Repair", active = false)]
+  [KSPEvent(guiActiveUnfocused = true, guiName = "_", active = false)]
   public void Repair()
   {
+    // disable for dead eva kerbals
     Vessel v = FlightGlobals.ActiveVessel;
-    if (v == null || !v.isEVA || EVA.KerbalData(v).eva_dead) return;
-    ProtoCrewMember c = v.GetVesselCrew()[0];
-    if (trait.Length > 0 && c.trait != trait)
+    if (v == null || EVA.IsDead(v)) return;
+
+    // check trait
+    if (!repair_cs.check(v))
     {
-      Message.Post(Lib.BuildString("Only <b>", trait, "s</b> can repair this component"));
+      Message.Post
+      (
+        Lib.TextVariant
+        (
+          "I'm not qualified for this",
+          "I will not even know where to start",
+          "I'm afraid I can't do that"
+        ),
+        repair_cs.warning()
+      );
       return;
     }
-    if (c.experienceLevel < level)
+
+    // flag as not broken
+    broken = false;
+
+    // reset times
+    last = 0.0;
+    next = 0.0;
+
+    // re-enable module
+    foreach(PartModule m in modules)
     {
-      Message.Post(Lib.BuildString("<b>", c.name, "</b> doesn't have enough experience"));
-      return;
+      m.isEnabled = true;
+      m.enabled = true;
     }
 
-    component.Apply(Math.Pow(2.0, malfunctions));
-    malfunctions = 0;
+    // we need to reconfigure the module here, because if all modules of a type
+    // share the broken state, and these modules are part of a configure setup,
+    // then repairing will enable all of them, messing up with the configuration
+    part.FindModulesImplementing<Configure>().ForEach(k => k.configure());
 
-    Message.Post(Lib.BuildString("<b>", type, "</b> repaired"), repair_subtext[Lib.RandomInt(repair_subtext.Length)]);
-  }
+    // type-specific hacks
+    apply(false);
 
-
-  public void Break()
-  {
-    if (malfunctions == 2) return;
-    ++malfunctions;
-    epoch = 0.0;
-    component.Apply(0.5);
-    ShowMessage(vessel, type);
-  }
-
-
-  public static void Break(Vessel v, ProtoPartModuleSnapshot m)
-  {
-    // get malfunction level
-    uint malfunctions = Lib.Proto.GetUInt(m, "malfunctions");
-
-    // limit number of malfunctions per-component
-    if (malfunctions >= 2u) return;
-
-    // increase malfunction
-    Lib.Proto.Set(m, "malfunctions", ++malfunctions);
-
-    // reset epoch
-    Lib.Proto.Set(m, "epoch", 0.0);
-
-    // show message
-    ShowMessage(v, Lib.Proto.GetString(m, "type"));
-  }
-
-
-  // set highlighting
-  public static void SetHighlight(Part p)
-  {
-    // get max malfunction among all reliability components in the part
-    uint max_malfunctions = 0;
-    foreach(Reliability m in p.FindModulesImplementing<Reliability>())
-    {
-      max_malfunctions = Math.Max(max_malfunctions, m.malfunctions);
-    }
-
-    // note: when solar panels break (the stock mechanic), this throw exceptions inside KSP
-    try
-    {
-      if (DB.Ready() && DB.VesselData(p.vessel.id).cfg_highlights > 0)
-      {
-        switch(max_malfunctions)
-        {
-          case 0:
-            p.SetHighlightDefault();
-            break;
-
-          case 1:
-            p.SetHighlightType(Part.HighlightType.AlwaysOn);
-            p.SetHighlightColor(Color.yellow);
-            p.SetHighlight(true, false);
-            break;
-
-          default:
-            p.SetHighlightType(Part.HighlightType.AlwaysOn);
-            p.SetHighlightColor(Color.red);
-            p.SetHighlight(true, false);
-            break;
-        }
-      }
-      else
-      {
-        p.SetHighlightDefault();
-      }
-    }
-    catch {}
-  }
-
-
-  public static void ShowMessage(Vessel v, string type)
-  {
-    if (DB.Ready() && DB.VesselData(v.id).cfg_malfunction == 1)
-    {
-      Message.Post(Severity.warning, Lib.BuildString("<b>", type, "</b> malfunctioned on <b>", v.vesselName, "</b>"));
-    }
-  }
-
-
-  public override string GetInfo()
-  {
-    return Lib.BuildString
+    // notify user
+    Message.Post
     (
-      Lib.Specifics(Lib.BuildString("The ", type, " can malfunction")),
-      Lib.Specifics(true, "MTBF <i>(basic quality)</i>", Lib.HumanReadableDuration(mtbf)),
-      Lib.Specifics(true, "MTBF <i>(max quality)</i>", Lib.HumanReadableDuration(mtbf * 5.0)),
-      Lib.Specifics(true, "Repair specialization", trait.Length > 0 ? trait : "Any"),
-      Lib.Specifics(true, "Repair experience level", level.ToString()),
-      Lib.Specifics(true, "Effect", desc)
+      Lib.BuildString("<b>", title, "</b> repaired"),
+      Lib.TextVariant
+      (
+        "A powerkick did the trick",
+        "Duct tape, is there something it can't fix?",
+        "Fully operational again",
+        "We are back in business"
+      )
     );
   }
 
 
-  static string[] repair_subtext =
+  //[KSPEvent(guiActive = true, guiActiveUnfocused = true, guiName = "Break [TEST]", active = true)] // [for testing]
+  public void Break()
   {
-    "A powerkick did the trick",
-    "Ductape, is there something it can't fix?",
-    "Fully operational again"
-  };
+    // if manned, or if safemode didn't trigger
+    if (Cache.VesselInfo(vessel).crew_capacity > 0 || Lib.RandomDouble() > Settings.SafeModeChance)
+    {
+      // flag as broken
+      broken = true;
+
+      // determine if this is a critical failure
+      critical = Lib.RandomDouble() < Settings.CriticalChance;
+
+      // disable module
+      foreach(PartModule m in modules)
+      {
+        m.isEnabled = false;
+        m.enabled = false;
+      }
+
+      // type-specific hacks
+      apply(true);
+
+      // notify user
+      broken_msg(vessel, title, critical);
+    }
+    // safemode
+    else
+    {
+      // reset age
+      last = 0.0;
+      next = 0.0;
+
+      // notify user
+      safemode_msg(vessel, title);
+    }
+
+    // in any case, incentive redundancy
+    if (Settings.IncentiveRedundancy)
+    {
+      incentive_redundancy(vessel, redundancy);
+    }
+  }
 
 
-  // ==========================================================================
-  // # UTILITIES
-  // ==========================================================================
-
-
-  // return malfunction penalty of a part
-  public static double Penalty(ProtoPartSnapshot p, string type, double scale = 0.5)
+  public static void ProtoBreak(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m)
   {
-    // get the module
-    // note: if the part has no malfunction, default to no penality
-    ProtoPartModuleSnapshot m = p.modules.Find(k => k.moduleName == "Reliability" && Lib.Proto.GetString(k, "type") == type);
-    if (m == null) return 1.0;
+    // get reliability module prefab
+    string type = Lib.Proto.GetString(m, "type", string.Empty);
+    Reliability reliability = p.partPrefab.FindModulesImplementing<Reliability>().Find(k => k.type == type);
+    if (reliability == null) return;
 
-    // return penalty;
-    uint malfunctions = Lib.Proto.GetUInt(m, "malfunctions");
-    return Math.Pow(scale, (double)malfunctions);
+    // if manned, or if safemode didn't trigger
+    if (Cache.VesselInfo(v).crew_capacity > 0 || Lib.RandomDouble() > Settings.SafeModeChance)
+    {
+      // flag as broken
+      Lib.Proto.Set(m, "broken", true);
+
+      // determine if this is a critical failure
+      bool critical = Lib.RandomDouble() < Settings.CriticalChance;
+      Lib.Proto.Set(m, "critical", critical);
+
+      // for each associated module
+      foreach(var proto_module in p.modules.FindAll(k => k.moduleName == reliability.type))
+      {
+        // disable the module
+        Lib.Proto.Set(proto_module, "isEnabled", false);
+      }
+
+      // type-specific hacks
+      switch(reliability.type)
+      {
+        case "ProcessController":
+          foreach(ProcessController pc in p.partPrefab.FindModulesImplementing<ProcessController>())
+          {
+            ProtoPartResourceSnapshot res = p.resources.Find(k => k.resourceName == pc.resource);
+            if (res != null) res.flowState = false;
+          }
+          break;
+      }
+
+      // show message
+      broken_msg(v, reliability.title, critical);
+    }
+    // safe mode
+    else
+    {
+      // reset age
+      Lib.Proto.Set(m, "last", 0.0);
+      Lib.Proto.Set(m, "next", 0.0);
+
+      // notify user
+      safemode_msg(v, reliability.title);
+    }
+
+    // in any case, incentive redundancy
+    if (Settings.IncentiveRedundancy)
+    {
+      incentive_redundancy(v, reliability.redundancy);
+    }
+  }
+
+
+  // part tooltip
+  public override string GetInfo()
+  {
+    return Specs().info();
+  }
+
+
+  // specifics support
+  public Specifics Specs()
+  {
+    Specifics specs = new Specifics();
+    if (redundancy.Length > 0) specs.add("Redundancy", redundancy);
+    specs.add("Repair", new CrewSpecs(repair).info());
+    specs.add(string.Empty);
+    specs.add("<color=#00ffff>Standard quality</color>");
+    specs.add("MTBF", Lib.HumanReadableDuration(mtbf));
+    specs.add(string.Empty);
+    specs.add("<color=#00ffff>High quality</color>");
+    specs.add("MTBF", Lib.HumanReadableDuration(mtbf * Settings.QualityScale));
+    if (extra_cost > double.Epsilon) specs.add("Extra cost", Lib.HumanReadableCost(extra_cost * part.partInfo.cost));
+    if (extra_mass > double.Epsilon) specs.add("Extra mass", Lib.HumanReadableMass(extra_mass * part.partInfo.partPrefab.mass));
+    return specs;
+  }
+
+
+  // module info support
+  public string GetModuleTitle() { return Lib.BuildString(title, " Reliability"); }
+  public string GetPrimaryField() { return string.Empty; }
+  public Callback<Rect> GetDrawModulePanelCallback() { return null; }
+
+
+  // module cost support
+  public float GetModuleCost(float defaultCost, ModifierStagingSituation sit) { return quality ? (float)extra_cost * part.partInfo.cost : 0.0f; }
+
+
+  // module mass support
+  public float GetModuleMass(float defaultCost, ModifierStagingSituation sit) { return quality ? (float)extra_mass * part.partInfo.partPrefab.mass : 0.0f; }
+  public ModifierChangeWhen GetModuleCostChangeWhen() { return ModifierChangeWhen.CONSTANTLY; }
+  public ModifierChangeWhen GetModuleMassChangeWhen() { return ModifierChangeWhen.CONSTANTLY; }
+
+
+  // apply type-specific hacks to enable/disable the module
+  void apply(bool b)
+  {
+    switch(type)
+    {
+      case "ProcessController":
+        if (b)
+        {
+          foreach(PartModule m in modules)
+          {
+            Lib.SetResourceFlow(part, (m as ProcessController).resource, false);
+          }
+        }
+        break;
+
+      case "ModuleDeployableSolarPanel":
+      case "ModuleDeployableRadiator":
+        if (b)
+        {
+          part.FindModelComponents<Animation>().ForEach(k => k.Stop());
+        }
+        break;
+
+      case "ModuleLight":
+        if (b)
+        {
+          foreach(PartModule m in modules)
+          {
+            ModuleLight light = m as ModuleLight;
+            if (light.animationName.Length > 0)
+            {
+              new Animator(part, light.animationName).still(0.0f);
+            }
+            else
+            {
+              part.FindModelComponents<Light>().ForEach(k => k.enabled = false );
+            }
+          }
+        }
+        break;
+
+      case "ModuleEngines":
+      case "ModuleEnginesFX":
+        if (b)
+        {
+          foreach(PartModule m in modules)
+          {
+            (m as ModuleEngines).Shutdown();
+          }
+        }
+        break;
+    }
+  }
+
+
+  static void incentive_redundancy(Vessel v, string redundancy)
+  {
+    if (v.loaded)
+    {
+      foreach(Reliability m in Lib.FindModules<Reliability>(v))
+      {
+        if (m.redundancy == redundancy)
+        {
+          m.next += m.next - m.last;
+        }
+      }
+    }
+    else
+    {
+      foreach(ProtoPartModuleSnapshot m in Lib.FindModules(v.protoVessel, "Reliability"))
+      {
+        // find part
+        ProtoPartSnapshot p = v.protoVessel.protoPartSnapshots.Find(k => k.modules.Contains(m));
+
+        // find module prefab
+        string type = Lib.Proto.GetString(m, "type", string.Empty);
+        Reliability reliability = p.partPrefab.FindModulesImplementing<Reliability>().Find(k => k.type == type);
+        if (reliability == null) continue;
+
+        // double time to next failure
+        if (reliability.redundancy == redundancy)
+        {
+          double last = Lib.Proto.GetDouble(m, "last");
+          double next = Lib.Proto.GetDouble(m, "next");
+          Lib.Proto.Set(m, "next", next + (next - last));
+        }
+      }
+    }
+  }
+
+
+  // set highlighting
+  static void highlight(Part p)
+  {
+    if (DB.Vessel(p.vessel).cfg_highlights)
+    {
+      // get state among all reliability components in the part
+      bool broken = false;
+      bool critical = false;
+      foreach(Reliability m in p.FindModulesImplementing<Reliability>())
+      {
+        broken |= m.broken;
+        critical |= m.critical;
+      }
+
+      if (broken)
+      {
+        Highlighter.set(p.flightID, !critical ? Color.yellow : Color.red);
+      }
+    }
+  }
+
+
+  static void broken_msg(Vessel v, string title, bool critical)
+  {
+    if (DB.Vessel(v).cfg_malfunction)
+    {
+      if (!critical)
+      {
+        Message.Post
+        (
+          Severity.warning,
+          Lib.BuildString("<b>", title, "</b> malfunctioned on <b>", v.vesselName, "</b>"),
+          "We can still repair it"
+        );
+      }
+      else
+      {
+        Message.Post
+        (
+          Severity.danger,
+          Lib.BuildString("<b>", title, "</b> failed on <b>", v.vesselName, "</b>"),
+          "It is gone for good"
+        );
+      }
+    }
+  }
+
+
+  static void safemode_msg(Vessel v, string title)
+  {
+    Message.Post
+    (
+      Severity.warning,
+      Lib.BuildString("There has been a problem with <b>", title, "</b> on <b>", v.vesselName, "</b>"),
+      "We were able to fix it remotely, this time"
+    );
   }
 
 
@@ -307,7 +555,7 @@ public sealed class Reliability : PartModule
     if (v.loaded)
     {
       // choose a module at random
-      var modules = v.FindPartModulesImplementing<Reliability>();
+      var modules = Lib.FindModules<Reliability>(v).FindAll(k => !k.broken);
       if (modules.Count == 0) return;
       var m = modules[Lib.RandomInt(modules.Count)];
 
@@ -317,25 +565,16 @@ public sealed class Reliability : PartModule
     // if vessel is not loaded
     else
     {
-      // get all reliability modules
-      var modules = new List<KeyValuePair<ProtoPartSnapshot,ProtoPartModuleSnapshot>>();
-      foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
-      {
-        foreach(ProtoPartModuleSnapshot m in p.modules)
-        {
-          if (m.moduleName == "Reliability")
-          {
-            modules.Add(new KeyValuePair<ProtoPartSnapshot,ProtoPartModuleSnapshot>(p, m));
-          }
-        }
-      }
-
-      // choose one at random
+      // choose a module at random
+      var modules = Lib.FindModules(v.protoVessel, "Reliability").FindAll(k => !Lib.Proto.GetBool(k, "broken"));
       if (modules.Count == 0) return;
-      var pair = modules[Lib.RandomInt(modules.Count)];
+      var m = modules[Lib.RandomInt(modules.Count)];
+
+      // find its part
+      ProtoPartSnapshot p = v.protoVessel.protoPartSnapshots.Find(k => k.modules.Contains(m));
 
       // break it
-      Reliability.Break(v, pair.Value);
+      ProtoBreak(v, p, m);
     }
   }
 
@@ -345,334 +584,54 @@ public sealed class Reliability : PartModule
   {
     if (v.loaded)
     {
-      foreach(Reliability m in v.FindPartModulesImplementing<Reliability>())
+      return Lib.HasModule<Reliability>(v, k => !k.broken);
+    }
+    else
+    {
+      return Lib.HasModule(v.protoVessel, "Reliability", k => !Lib.Proto.GetBool(k, "broken"));
+    }
+  }
+
+
+  // return true if at least a component has malfunctioned or had a critical failure
+  public static bool HasMalfunction(Vessel v)
+  {
+    if (v.loaded)
+    {
+      foreach(Reliability m in Lib.FindModules<Reliability>(v))
       {
-        if (m.malfunctions < 2u) return true;
+        if (m.broken) return true;
       }
     }
     else
     {
-      foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
+      foreach(ProtoPartModuleSnapshot m in Lib.FindModules(v.protoVessel, "Reliability"))
       {
-        foreach(ProtoPartModuleSnapshot m in p.modules)
-        {
-          if (m.moduleName == "Reliability")
-          {
-            if (Lib.Proto.GetUInt(m, "malfunctions") < 2u) return true;
-          }
-        }
+        if (Lib.Proto.GetBool(m, "broken")) return true;
       }
     }
     return false;
   }
 
 
-  // return average component quality
-  public static double AverageQuality(Vessel v)
+  // return true if at least a component has a critical failure
+  public static bool HasCriticalFailure(Vessel v)
   {
-    double quality_sum = 0.0;
-    double quality_count = 0.0;
     if (v.loaded)
     {
-      foreach(Reliability m in v.FindPartModulesImplementing<Reliability>())
+      foreach(Reliability m in Lib.FindModules<Reliability>(v))
       {
-        quality_sum += m.quality;
-        quality_count += 1.0;
+        if (m.critical) return true;
       }
     }
     else
     {
-      foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
+      foreach(ProtoPartModuleSnapshot m in Lib.FindModules(v.protoVessel, "Reliability"))
       {
-        foreach(ProtoPartModuleSnapshot m in p.modules)
-        {
-          if (m.moduleName == "Reliability")
-          {
-            quality_sum += Lib.Proto.GetDouble(m, "quality", 1.0);
-            quality_count += 1.0;
-          }
-        }
+        if (Lib.Proto.GetBool(m, "critical")) return true;
       }
     }
-    return quality_count > 0.0 ? quality_sum / quality_count : 0.0;
-  }
-
-
-  // return max malfunction count among all parts of a vessel, or all parts containing the specified module
-  public static uint MaxMalfunction(Vessel v)
-  {
-    uint max_malfunction = 0;
-    if (v.loaded)
-    {
-      foreach(Reliability m in v.FindPartModulesImplementing<Reliability>())
-      {
-        max_malfunction = Math.Max(max_malfunction, m.malfunctions);
-      }
-    }
-    else
-    {
-      foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
-      {
-        foreach(ProtoPartModuleSnapshot m in p.modules)
-        {
-          if (m.moduleName == "Reliability")
-          {
-            max_malfunction = Math.Max(max_malfunction, Lib.Proto.GetUInt(m, "malfunctions"));
-          }
-        }
-      }
-    }
-    return max_malfunction;
-  }
-
-
-  // ==========================================================================
-  // # QUALITY
-  // ==========================================================================
-
-
-  // deduce quality from technological level
-  public static double DeduceQuality()
-  {
-    double[] value = {1.0, 2.0, 3.0, 4.0, 5.0};
-    return value[Lib.CountTech(manufacturing_quality.techs)];
-  }
-
-
-  // return some kind of human readable description for quality
-  public static string QualityToString(double quality)
-  {
-    if (quality <= 1.5) return "poor";
-    if (quality <= 2.5) return "mediocre";
-    if (quality <= 4.5) return "modest";
-    if (quality <= 6.5) return "good";
-    return "good";
-  }
-
-
-  // manufacturing quality technologies
-  public class ManufacturingQuality
-  {
-    public ManufacturingQuality()
-    {
-      var cfg = Lib.ParseConfig("Kerbalism/Patches/System/ManufacturingQuality");
-      this.techs[0] = Lib.ConfigValue(cfg, "tech0", "advConstruction");
-      this.techs[1] = Lib.ConfigValue(cfg, "tech1", "specializedConstruction");
-      this.techs[2] = Lib.ConfigValue(cfg, "tech2", "composites");
-      this.techs[3] = Lib.ConfigValue(cfg, "tech2", "metaMaterials");
-    }
-    public string[] techs = {"", "", "", ""};
-  }
-  public static ManufacturingQuality manufacturing_quality = new ManufacturingQuality();
-
-
-  // ==========================================================================
-  // # COMPONENTS
-  // ==========================================================================
-
-
-  public abstract class Component
-  {
-    // break/repair the component
-    public abstract void Apply(double k);
-  }
-
-
-  sealed class EngineComponent : Component
-  {
-    public EngineComponent(List<ModuleEngines> engines)
-    {
-      this.engines = engines;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in engines)
-      {
-        m.heatProduction /= (float)k;
-      }
-    }
-
-    List<ModuleEngines> engines;
-  }
-
-
-  sealed class PanelComponent : Component
-  {
-    public PanelComponent(List<ModuleDeployableSolarPanel> panels)
-    {
-      this.panels = panels;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in panels)
-      {
-        m.resources[0].rate *= k;
-      }
-    }
-
-    List<ModuleDeployableSolarPanel> panels;
-  }
-
-
-  sealed class GeneratorComponent : Component
-  {
-    public GeneratorComponent(List<ModuleGenerator> generators)
-    {
-      this.generators = generators;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in generators)
-      {
-        foreach(var r in m.outputList) r.rate *= k;
-      }
-    }
-
-    List<ModuleGenerator> generators;
-  }
-
-
-  sealed class ConverterComponent : Component
-  {
-    public ConverterComponent(List<ModuleResourceConverter> converters)
-    {
-      this.converters = converters;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in converters)
-      {
-        foreach(var r in m.outputList) r.Ratio *= k;
-      }
-    }
-
-    List<ModuleResourceConverter> converters;
-  }
-
-
-  sealed class HarvesterComponent : Component
-  {
-    public HarvesterComponent(List<ModuleResourceHarvester> harvesters)
-    {
-      this.harvesters = harvesters;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in harvesters)
-      {
-        m.Efficiency *= (float)k;
-      }
-    }
-
-    List<ModuleResourceHarvester> harvesters;
-  }
-
-
-  sealed class ReactionWheelComponent : Component
-  {
-    public ReactionWheelComponent(List<ModuleReactionWheel> reaction_wheels)
-    {
-      this.reaction_wheels = reaction_wheels;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in reaction_wheels)
-      {
-        m.PitchTorque *= (float)k;
-        m.YawTorque *= (float)k;
-        m.RollTorque *= (float)k;
-      }
-    }
-
-    List<ModuleReactionWheel> reaction_wheels;
-  }
-
-  sealed class RCSComponent : Component
-  {
-    public RCSComponent(List<ModuleRCS> rcs_engines)
-    {
-      this.rcs_engines = rcs_engines;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in rcs_engines)
-      {
-        foreach(var prop in m.propellants)
-        {
-          prop.ratio /= (float)Math.Pow(k, 1.5);
-        }
-      }
-    }
-
-    List<ModuleRCS> rcs_engines;
-  }
-
-
-  sealed class GreenhouseComponent : Component
-  {
-    public GreenhouseComponent(List<Greenhouse> greenhouses)
-    {
-      this.greenhouses = greenhouses;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in greenhouses)
-      {
-        m.ec_rate /= k;
-      }
-    }
-
-    List<Greenhouse> greenhouses;
-  }
-
-  sealed class GravityRingComponent : Component
-  {
-    public GravityRingComponent(List<GravityRing> rings)
-    {
-      this.rings = rings;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in rings)
-      {
-        m.ec_rate /= k;
-      }
-    }
-
-    List<GravityRing> rings;
-  }
-
-
-  sealed class EmitterComponent : Component
-  {
-    public EmitterComponent(List<Emitter> emitters)
-    {
-      this.emitters = emitters;
-    }
-
-    public override void Apply(double k)
-    {
-      foreach(var m in emitters)
-      {
-        m.ec_rate /= k;
-      }
-    }
-
-    List<Emitter> emitters;
-  }
-
-  sealed class UnknownComponent : Component
-  {
-    public override void Apply(double k) {}
+    return false;
   }
 }
 

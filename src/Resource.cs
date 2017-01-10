@@ -1,9 +1,4 @@
-﻿// ====================================================================================================================
-// resource system
-// ====================================================================================================================
-
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 
@@ -11,7 +6,7 @@ namespace KERBALISM {
 
 
 // store info about a resource in a vessel
-public class resource_info
+public sealed class resource_info
 {
   public resource_info(Vessel v, string res_name)
   {
@@ -39,10 +34,10 @@ public class resource_info
       {
         foreach(ProtoPartResourceSnapshot pprs in pps.resources)
         {
-          if (pprs.resourceName == resource_name && Lib.Parse.ToBool(pprs.resourceValues.GetValue("flowState")))
+          if (pprs.resourceName == resource_name && pprs.flowState)
           {
-            amount += Lib.Parse.ToDouble(pprs.resourceValues.GetValue("amount"));
-            capacity += Lib.Parse.ToDouble(pprs.resourceValues.GetValue("maxAmount"));
+            amount += pprs.amount;
+            capacity += pprs.maxAmount;
           }
         }
       }
@@ -70,10 +65,7 @@ public class resource_info
     // for loaded vessels
     if (v.loaded)
     {
-      // syncronize the amount to the vessel
-      v.rootPart.RequestResource(resource_name, -deferred, ResourceFlowMode.ALL_VESSEL);
-
-      // get amount/capacity
+      // for each part resource
       double new_amount = 0.0;
       capacity = 0.0;
       foreach(Part p in v.Parts)
@@ -82,8 +74,20 @@ public class resource_info
         {
           if (r.flowState && r.resourceName == resource_name)
           {
+            // get amount/capacity
             new_amount += r.amount;
             capacity += r.maxAmount;
+
+            // stock RequestResource() is iterating on all parts and all resources probably,
+            // so we do both amount/capacity detection and resource synchronization at the same time
+            // this also give coherency among flow rules between loaded and unloaded vessels
+            if (Math.Abs(deferred) > 0.0000001)
+            {
+              double amount_diff = Lib.Clamp(r.amount + deferred, 0.0, r.maxAmount) - r.amount;
+              r.amount += amount_diff;
+              deferred -= amount_diff;
+            }
+            if (r.amount < 0.0000001) r.amount = 0.0;
           }
         }
       }
@@ -91,7 +95,7 @@ public class resource_info
       // calculate rate of change per-second
       // note: do not update rate during and immediately after warp blending (stock modules have instabilities during warp blending)
       // note: rate is not updated during the simulation steps where meal is consumed, to avoid counting it twice
-      if (Kerbalism.warp_blending > 50 && !meal_consumed) rate = (new_amount - amount) / elapsed_s;
+      if (Kerbalism.warp_blending > 50 && !meal_happened) rate = (new_amount - amount) / elapsed_s;
 
       // update amount
       amount = new_amount;
@@ -99,45 +103,24 @@ public class resource_info
     // for unloaded vessels
     else
     {
-      // if BackgroundProcessing was detected, we need to scan the parts and find
-      // the current amount of resource, that may have changed in the meanwhile,
-      // and add the difference with the amount stored at last update to deferred
-      double ext = 0.0;
-      if (Kerbalism.detected_mods.BackgroundProcessing)
-      {
-        foreach(ProtoPartSnapshot pps in v.protoVessel.protoPartSnapshots)
-        {
-          foreach(ProtoPartResourceSnapshot res in pps.resources)
-          {
-            if (res.resourceName == resource_name && Lib.Parse.ToBool(res.resourceValues.GetValue("flowState")))
-            {
-              ext += Lib.Parse.ToDouble(res.resourceValues.GetValue("amount"));
-            }
-          }
-        }
-        ext -= amount;
-      }
-
       // apply all deferred requests
-      amount = Lib.Clamp(amount + deferred + ext, 0.0, capacity);
+      amount = Lib.Clamp(amount + deferred , 0.0, capacity);
 
       // calculate rate of change per-second
       // note: rate is not updated during the simulation steps where meal is consumed, to avoid counting it twice
-      if (!meal_consumed) rate = Lib.Clamp(deferred + ext, -amount, capacity - amount) / elapsed_s;
+      if (!meal_happened) rate = Lib.Clamp(deferred, -amount, capacity - amount) / elapsed_s;
 
       // syncronize the amount to the vessel
       foreach(ProtoPartSnapshot pps in v.protoVessel.protoPartSnapshots)
       {
         foreach(ProtoPartResourceSnapshot res in pps.resources)
         {
-          if (res.resourceName == resource_name && Lib.Parse.ToBool(res.resourceValues.GetValue("flowState")))
+          if (res.resourceName == resource_name && res.flowState)
           {
-            double pps_amount = Lib.Parse.ToDouble(res.resourceValues.GetValue("amount"));
-            double pps_capacity = Lib.Parse.ToDouble(res.resourceValues.GetValue("maxAmount"));
-            double new_amount = Lib.Clamp(pps_amount + deferred, 0.0, pps_capacity);
-            res.resourceValues.SetValue("amount", new_amount.ToString());
-            deferred -= new_amount - pps_amount;
-            if (Math.Abs(deferred) < 0.0001) break;
+            double new_amount = Lib.Clamp(res.amount + deferred, 0.0, res.maxAmount);
+            deferred -= new_amount - res.amount;
+            res.amount = new_amount;
+            if (Math.Abs(deferred) < 0.0000001) break;
           }
         }
       }
@@ -149,8 +132,34 @@ public class resource_info
     // reset deferred consumption/production
     deferred = 0.0;
 
-    // reseal meal consumed flag
-    meal_consumed = false;
+    // reseal meal flag
+    meal_happened = false;
+  }
+
+
+  // estimate time until depletion
+  public double Depletion(int crew_count)
+  {
+    // calculate all interval-normalized rates from related rules
+    double meal_rate = 0.0;
+    if (crew_count > 0)
+    {
+      foreach(Rule rule in Profile.rules)
+      {
+        if (rule.interval > 0)
+        {
+          if (rule.input == resource_name)  meal_rate -= rule.rate / rule.interval;
+          if (rule.output == resource_name) meal_rate += rule.rate / rule.interval;
+        }
+      }
+      meal_rate *= (double)crew_count;
+    }
+
+    // calculate total rate of change
+    double delta = rate + meal_rate;
+
+    // return depletion
+    return amount <= double.Epsilon ? 0.0 : delta >= -0.0000001 ? double.NaN : amount / -delta;
   }
 
 
@@ -160,75 +169,110 @@ public class resource_info
   public double capacity;             // storage capacity of resource
   public double level;                // amount vs capacity, or 0 if there is no capacity
   public double rate;                 // rate of change in amount per-second
-  public bool   meal_consumed;        // true if a meal was consumed in the last simulation step
+  public bool   meal_happened;        // true if a meal-like consumption/production was processed in the last simulation step
 }
 
 
 public sealed class resource_recipe
 {
-  // hard-coded priorities
-  public const int rule_priority = 0;
-  public const int scrubber_priority = 1;
-  public const int harvester_priority = 2;
-  public const int converter_priority = 3;
-
-  // ctor
-  public resource_recipe(int priority)
+  public struct entry
   {
-    this.priority = priority;
+    public entry(string name, double quantity)
+    {
+      this.name = name;
+      this.quantity = quantity;
+      this.inv_quantity = 1.0 / quantity;
+    }
+    public string name;
+    public double quantity;
+    public double inv_quantity;
+  }
+
+  public resource_recipe(bool dump = false)
+  {
+    this.inputs = new List<entry>();
+    this.outputs = new List<entry>();
+    this.dump = dump;
+    this.left = 1.0;
   }
 
   // add an input to the recipe
   public void Input(string resource_name, double quantity)
   {
-    inputs[resource_name] = quantity;
+    if (quantity > double.Epsilon) //< avoid division by zero
+    {
+      inputs.Add(new entry(resource_name, quantity));
+    }
   }
 
   // add an output to the recipe
   public void Output(string resource_name, double quantity)
   {
-    outputs[resource_name] = quantity;
+    if (quantity > double.Epsilon) //< avoid division by zero
+    {
+      outputs.Add(new entry(resource_name, quantity));
+    }
   }
 
   // execute the recipe
-  public void Execute(Vessel v, vessel_resources resources)
+  public bool Execute(Vessel v, vessel_resources resources)
   {
     // determine worst input ratio
-    double worst_input = 1.0;
-    foreach(var pair in inputs)
+    // note: pure input recipes can just underflow
+    double worst_input = left;
+    if (outputs.Count > 0)
     {
-      if (pair.Value > double.Epsilon) //< avoid division by zero
+      for(int i=0; i<inputs.Count; ++i)
       {
-        resource_info res = resources.Info(v, pair.Key);
-        worst_input = Math.Min(worst_input, Math.Max(0.0, res.amount + res.deferred) / pair.Value);
+        entry e = inputs[i];
+        resource_info res = resources.Info(v, e.name);
+        worst_input = Lib.Clamp((res.amount + res.deferred) * e.inv_quantity, 0.0, worst_input);
       }
     }
 
-    // consume inputs
-    foreach(var pair in inputs)
+    // determine worst output ratio
+    // note: pure output recipes can just overflow
+    // note: recipes that dump overboard can just overflow
+    double worst_output = left;
+    if (inputs.Count > 0 && !dump)
     {
-      resource_info res = resources.Info(v, pair.Key);
-      res.Consume(pair.Value * worst_input);
+      for(int i=0; i<outputs.Count; ++i)
+      {
+        entry e = outputs[i];
+        resource_info res = resources.Info(v, e.name);
+        worst_output = Lib.Clamp((res.capacity - (res.amount + res.deferred)) * e.inv_quantity, 0.0, worst_output);
+      }
+    }
+
+    // determine worst-io
+    double worst_io = Math.Min(worst_input, worst_output);
+
+    // consume inputs
+    for(int i=0; i<inputs.Count; ++i)
+    {
+      entry e = inputs[i];
+      resources.Consume(v, e.name, e.quantity * worst_io);
     }
 
     // produce outputs
-    foreach(var pair in outputs)
+    for(int i=0; i<outputs.Count; ++i)
     {
-      resource_info res = resources.Info(v, pair.Key);
-      res.Produce(pair.Value * worst_input);
+      entry e = outputs[i];
+      resources.Produce(v, e.name, e.quantity * worst_io);
     }
+
+    // update amount left to execute
+    left -= worst_io;
+
+    // the recipe was executed, at least partially
+    return worst_io > double.Epsilon;
   }
 
-  // used to sort recipes by priority
-  public static int Compare(resource_recipe a, resource_recipe b)
-  {
-    return a.priority < b.priority ? -1 : a.priority == b.priority ? 0 : 1;
-  }
 
-  // store inputs and outputs
-  public Dictionary<string, double> inputs = new Dictionary<string, double>();
-  public Dictionary<string, double> outputs = new Dictionary<string, double>();
-  public int priority;
+  public List<entry>  inputs;   // set of input resources
+  public List<entry>  outputs;  // set of output resources
+  public bool         dump;     // dump excess output if true
+  public double       left;     // what proportion of the recipe is left to execute
 }
 
 
@@ -256,18 +300,28 @@ public sealed class vessel_resources
   // apply deferred requests for a vessel and synchronize the new amount in the vessel
   public void Sync(Vessel v, double elapsed_s)
   {
-    // IDEA: priority heuristic
-    // first pass: -outputs.size + inputs.size
-    // second pass: += recipe.priority for all recipes producing one of the input
+    // execute all possible recipes
+    bool executing = true;
+    while(executing)
+    {
+      executing = false;
+      for(int i=0; i<recipes.Count; ++i)
+      {
+        resource_recipe recipe = recipes[i];
+        if (recipe.left > double.Epsilon)
+        {
+          executing |= recipe.Execute(v, this);
+        }
+      }
+    }
 
-    // execute all recipes in order of priority
-    recipes.Sort(resource_recipe.Compare);
-    foreach(resource_recipe recipe in recipes) recipe.Execute(v, this);
+    // forget the recipes
     recipes.Clear();
 
     // apply all deferred requests and synchronize to vessel
     foreach(var pair in resources) pair.Value.Sync(v, elapsed_s);
   }
+
 
   // record deferred production of a resource (shortcut)
   public void Produce(Vessel v, string resource_name, double quantity)
@@ -294,13 +348,26 @@ public sealed class vessel_resources
 
 
 // manage per-vessel resource caches
-public sealed class ResourceCache
+public static class ResourceCache
 {
-  // ctor
-  public ResourceCache()
+  public static void init()
   {
-    // enable global access
-    instance = this;
+    entries = new Dictionary<Guid, vessel_resources>();
+  }
+
+  public static void clear()
+  {
+    entries.Clear();
+  }
+
+  public static void purge(Vessel v)
+  {
+    entries.Remove(v.id);
+  }
+
+  public static void purge(ProtoVessel pv)
+  {
+    entries.Remove(pv.vesselID);
   }
 
   // return resource cache for a vessel
@@ -308,13 +375,13 @@ public sealed class ResourceCache
   {
     // try to get existing entry if any
     vessel_resources entry;
-    if (instance.entries.TryGetValue(v.id, out entry)) return entry;
+    if (entries.TryGetValue(v.id, out entry)) return entry;
 
     // create new entry
     entry = new vessel_resources();
 
     // remember new entry
-    instance.entries.Add(v.id, entry);
+    entries.Add(v.id, entry);
 
     // return new entry
     return entry;
@@ -324,12 +391,6 @@ public sealed class ResourceCache
   public static resource_info Info(Vessel v, string resource_name)
   {
     return Get(v).Info(v, resource_name);
-  }
-
-  // remove a vessel from the resource cache
-  public static void Purge(Guid vessel_id)
-  {
-    instance.entries.Remove(vessel_id);
   }
 
   // register deferred production of a resource (shortcut)
@@ -352,10 +413,7 @@ public sealed class ResourceCache
 
 
   // resource cache
-  Dictionary<Guid, vessel_resources> entries = new Dictionary<Guid, vessel_resources>(512);
-
-  // permit global access
-  static ResourceCache instance;
+  static Dictionary<Guid, vessel_resources> entries;
 }
 
 

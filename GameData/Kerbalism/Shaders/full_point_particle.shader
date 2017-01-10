@@ -18,7 +18,7 @@ Shader "Custom/FullPointParticle"
       CGPROGRAM
       #pragma vertex vert
       #pragma fragment frag
-      #pragma target 3.0
+      #pragma target 2.5
 
       struct v2f
       {
@@ -28,7 +28,7 @@ Shader "Custom/FullPointParticle"
         float4 color : TEXCOORD2;
       };
 
-      v2f vert(float4 in_pos : POSITION, fixed4 in_color : COLOR, float2 in_psize : TEXCOORD, out float4 pos : POSITION)
+      v2f vert(float4 in_pos : POSITION, fixed4 in_color : COLOR, float2 in_psize : TEXCOORD, out float4 pos : SV_POSITION)
       {
         // output clip-space vertex position
         pos = mul(UNITY_MATRIX_MVP, in_pos);

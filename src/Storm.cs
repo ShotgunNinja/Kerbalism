@@ -1,9 +1,4 @@
-﻿// ====================================================================================================================
-// implement space weather mechanics
-// ====================================================================================================================
-
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,12 +7,12 @@ namespace KERBALISM {
 
 
 
-public sealed class Storm
+public static class Storm
 {
-  public void update(CelestialBody body, double elapsed_s)
+  public static void update(CelestialBody body, double elapsed_s)
   {
     // do nothing if storms are disabled
-    if (Settings.StormDuration <= double.Epsilon) return;
+    if (!Features.SpaceWeather) return;
 
     // skip the sun
     if (body.flightGlobalsIndex == 0) return;
@@ -27,7 +22,7 @@ public sealed class Storm
     if (body.referenceBody.flightGlobalsIndex != 0) return;
 
     // get body data
-    body_data bd = DB.BodyData(body.name);
+    BodyData bd = DB.Body(body.name);
 
     // generate storm time if necessary
     if (bd.storm_time <= double.Epsilon)
@@ -87,10 +82,10 @@ public sealed class Storm
   }
 
 
-  public void update(Vessel v, vessel_info vi, vessel_data vd, double elapsed_s)
+  public static void update(Vessel v, vessel_info vi, VesselData vd, double elapsed_s)
   {
     // do nothing if storms are disabled
-    if (Settings.StormDuration <= double.Epsilon) return;
+    if (!Features.SpaceWeather) return;
 
     // only consider vessels in interplanetary space
     if (v.mainBody.flightGlobalsIndex != 0) return;
@@ -141,7 +136,8 @@ public sealed class Storm
   // return storm frequency factor by distance from sun
   static double storm_frequency(double dist)
   {
-    return Kerbalism.AU / dist;
+    double AU = Lib.PlanetarySystem(FlightGlobals.GetHomeBody()).orbit.semiMajorAxis;
+    return AU / dist;
   }
 
 
@@ -174,7 +170,7 @@ public sealed class Storm
         if (!vi.is_valid) continue;
 
         // obey message config
-        if (DB.VesselData(v.id).cfg_storm == 0) continue;
+        if (!DB.Vessel(v).cfg_storm) continue;
 
         // body is relevant
         return true;
@@ -188,7 +184,7 @@ public sealed class Storm
   public static bool skip_body(CelestialBody body)
   {
     // skip all bodies if storms are disabled
-    if (Settings.StormDuration <= double.Epsilon) return true;
+    if (!Features.SpaceWeather) return true;
 
     // skip the sun
     if (body.flightGlobalsIndex == 0) return true;
@@ -205,17 +201,15 @@ public sealed class Storm
   // return true if a storm is incoming
   public static bool Incoming(Vessel v)
   {
-    if (!DB.Ready()) return false;
-
     // if in interplanetary space
     if (v.mainBody.flightGlobalsIndex == 0)
     {
-      return DB.VesselData(v.id).storm_state == 1;
+      return DB.Vessel(v).storm_state == 1;
     }
     // if inside a planetary system
     else
     {
-      return DB.BodyData(Lib.PlanetarySystem(v.mainBody).name).storm_state == 1;
+      return DB.Body(Lib.PlanetarySystem(v.mainBody).name).storm_state == 1;
     }
   }
 
@@ -223,17 +217,15 @@ public sealed class Storm
   // return true if a storm is in progress
   public static bool InProgress(Vessel v)
   {
-    if (!DB.Ready()) return false;
-
     // if in interplanetary space
     if (v.mainBody.flightGlobalsIndex == 0)
     {
-      return DB.VesselData(v.id).storm_state == 2;
+      return DB.Vessel(v).storm_state == 2;
     }
     // if inside a planetary system
     else
     {
-      return DB.BodyData(Lib.PlanetarySystem(v.mainBody).name).storm_state == 2;
+      return DB.Body(Lib.PlanetarySystem(v.mainBody).name).storm_state == 2;
     }
   }
 
@@ -243,17 +235,15 @@ public sealed class Storm
   // - delta_time: time between calls to this function
   public static bool JustEnded(Vessel v, double delta_time)
   {
-    if (!DB.Ready()) return false;
-
     // if in interplanetary space
     if (v.mainBody.flightGlobalsIndex == 0)
     {
-      return DB.VesselData(v.id).storm_age < delta_time * 2.0;
+      return DB.Vessel(v).storm_age < delta_time * 2.0;
     }
     // if inside a planetary system
     else
     {
-      return DB.BodyData(Lib.PlanetarySystem(v.mainBody).name).storm_age < delta_time * 2.0;
+      return DB.Body(Lib.PlanetarySystem(v.mainBody).name).storm_age < delta_time * 2.0;
     }
   }
 
@@ -268,18 +258,16 @@ public sealed class Storm
   // return time left until CME impact
   public static double TimeBeforeCME(Vessel v)
   {
-    if (!DB.Ready()) return 0.0;
-
     // if in interplanetary space
     if (v.mainBody.flightGlobalsIndex == 0)
     {
-      vessel_data vd = DB.VesselData(v.id);
+      VesselData vd = DB.Vessel(v);
       return TimeBeforeCME(vd.storm_time, vd.storm_age);
     }
     // if inside a planetary system
     else
     {
-      body_data bd = DB.BodyData(Lib.PlanetarySystem(v.mainBody).name);
+      BodyData bd = DB.Body(Lib.PlanetarySystem(v.mainBody).name);
       return TimeBeforeCME(bd.storm_time, bd.storm_age);
     }
   }
@@ -295,18 +283,16 @@ public sealed class Storm
   // return time left until CME is over
   public static double TimeLeftCME(Vessel v)
   {
-    if (!DB.Ready()) return 0.0;
-
     // if in interplanetary space
     if (v.mainBody.flightGlobalsIndex == 0)
     {
-      vessel_data vd = DB.VesselData(v.id);
+      VesselData vd = DB.Vessel(v);
       return TimeLeftCME(vd.storm_time, vd.storm_age);
     }
     // if inside a planetary system
     else
     {
-      body_data bd = DB.BodyData(Lib.PlanetarySystem(v.mainBody).name);
+      BodyData bd = DB.Body(Lib.PlanetarySystem(v.mainBody).name);
       return TimeLeftCME(bd.storm_time, bd.storm_age);
     }
   }

@@ -1,69 +1,134 @@
-﻿// ====================================================================================================================
-// consume & produce resources for unloaded vessels
-// ====================================================================================================================
-
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Experience;
 using UnityEngine;
 
 
 namespace KERBALISM {
 
 
-public sealed class Background
+public static class Background
 {
-  public static void update(Vessel v, vessel_info vi, vessel_data vd, vessel_resources resources, double elapsed_s)
+  enum module_type
+  {
+    Reliability = 0,
+    Experiment,
+    Greenhouse,
+    GravityRing,
+    Emitter,
+    Harvester,
+    Laboratory,
+    Command,
+    Panel,
+    Generator,
+    Converter,
+    Drill,
+    AsteroidDrill,
+    StockLab,
+    Light,
+    Scanner,
+    CurvedPanel,
+    FissionGenerator,
+    RadioisotopeGenerator,
+    CryoTank,
+    Unknown
+  }
+
+  static module_type ModuleType(string module_name)
+  {
+    switch(module_name)
+    {
+      case "Reliability":                  return module_type.Reliability;
+      case "Experiment":                   return module_type.Experiment;
+      case "Greenhouse":                   return module_type.Greenhouse;
+      case "GravityRing":                  return module_type.GravityRing;
+      case "Emitter":                      return module_type.Emitter;
+      case "Harvester":                    return module_type.Harvester;
+      case "Laboratory":                   return module_type.Laboratory;
+      case "ModuleCommand":                return module_type.Command;
+      case "ModuleDeployableSolarPanel":   return module_type.Panel;
+      case "ModuleGenerator":              return module_type.Generator;
+      case "ModuleResourceConverter":
+      case "ModuleKPBSConverter":
+      case "FissionReactor":               return module_type.Converter;
+      case "ModuleResourceHarvester":      return module_type.Drill;
+      case "ModuleAsteroidDrill":          return module_type.AsteroidDrill;
+      case "ModuleScienceConverter":       return module_type.StockLab;
+      case "ModuleLight":
+      case "ModuleColoredLensLight":
+      case "ModuleMultiPointSurfaceLight": return module_type.Light;
+      case "SCANsat":
+      case "ModuleSCANresourceScanner":    return module_type.Scanner;
+      case "ModuleCurvedSolarPanel":       return module_type.CurvedPanel;
+      case "FissionGenerator":             return module_type.FissionGenerator;
+      case "ModuleRadioisotopeGenerator":  return module_type.RadioisotopeGenerator;
+      case "ModuleCryoTank":               return module_type.CryoTank;
+    }
+    return module_type.Unknown;
+  }
+
+  public static void update(Vessel v, vessel_info vi, VesselData vd, vessel_resources resources, double elapsed_s)
   {
     // get most used resource handlers
     resource_info ec = resources.Info(v, "ElectricCharge");
 
+    // store data required to support multiple modules of same type in a part
+    var PD = new Dictionary<string, Lib.module_prefab_data>();
+
     // for each part
     foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
     {
-      // a part can contain multiple resource converters
-      int converter_index = 0;
-
       // get part prefab (required for module properties)
       Part part_prefab = PartLoader.getPartInfoByName(p.partName).partPrefab;
+
+      // get all module prefabs
+      var module_prefabs = part_prefab.FindModulesImplementing<PartModule>();
+
+      // clear module indexes
+      PD.Clear();
 
       // for each module
       foreach(ProtoPartModuleSnapshot m in p.modules)
       {
-        // get the module prefab
-        PartModule module_prefab = Lib.FindModule(part_prefab, m.moduleName);
+        // get module type
+        // if the type is unknown, skip it
+        module_type type = ModuleType(m.moduleName);
+        if (type == module_type.Unknown) continue;
 
+        // get the module prefab
         // if the prefab doesn't contain this module, skip it
+        PartModule module_prefab = Lib.ModulePrefab(module_prefabs, m.moduleName, PD);
         if (!module_prefab) continue;
 
+        // if the module is disabled, skip it
+        // note: this must be done after ModulePrefab is called, so that indexes are right
+        if (!Lib.Proto.GetBool(m, "isEnabled")) continue;
+
         // process modules
-        switch(m.moduleName)
+        // note: this should be a fast switch, possibly compiled to a jump table
+        switch(type)
         {
-          case "Reliability":                  Reliability.BackgroundUpdate(v, m, module_prefab as Reliability, elapsed_s);                 break;
-          case "Scrubber":                     Scrubber.BackgroundUpdate(v, m, module_prefab as Scrubber, vi, resources, elapsed_s);        break;
-          case "Recycler":                     Recycler.BackgroundUpdate(v, m, module_prefab as Recycler, resources, elapsed_s);            break;
-          case "Greenhouse":                   Greenhouse.BackgroundUpdate(v, p, m, module_prefab as Greenhouse, vi, resources, elapsed_s); break;
-          case "GravityRing":                  GravityRing.BackgroundUpdate(v, p, m, module_prefab as GravityRing, resources, elapsed_s);   break;
-          case "Emitter":                      Emitter.BackgroundUpdate(v, p, m, module_prefab as Emitter, ec, elapsed_s);                  break;
-          case "ModuleCommand":                ProcessCommand(v, p, m, module_prefab as ModuleCommand, resources, elapsed_s);               break;
-          case "ModuleDeployableSolarPanel":   ProcessPanel(v, p, m, module_prefab as ModuleDeployableSolarPanel, vi, ec, elapsed_s);       break;
-          case "ModuleGenerator":              ProcessGenerator(v, p, m, module_prefab as ModuleGenerator, resources, elapsed_s);           break;
-          case "ModuleResourceConverter":
-          case "ModuleKPBSConverter":
-          case "FissionReactor":               ProcessConverter(v, p, m, part_prefab, converter_index++, resources, elapsed_s);             break;
-          case "ModuleResourceHarvester":      ProcessHarvester(v, p, m, module_prefab as ModuleResourceHarvester, resources, elapsed_s);   break;
-          case "ModuleAsteroidDrill":          ProcessAsteroidDrill(v, p, m, module_prefab as ModuleAsteroidDrill, resources, elapsed_s);   break;
-          case "ModuleScienceConverter":       ProcessLab(v, p, m, module_prefab as ModuleScienceConverter, ec, elapsed_s);                 break;
-          case "ModuleLight":
-          case "ModuleColoredLensLight":
-          case "ModuleMultiPointSurfaceLight": ProcessLight(v, p, m, module_prefab as ModuleLight, ec, elapsed_s);                          break;
-          case "SCANsat":
-          case "ModuleSCANresourceScanner":    ProcessScanner(v, p, m, module_prefab, part_prefab, vd, ec, elapsed_s);                      break;
-          case "ModuleCurvedSolarPanel":       ProcessCurvedPanel(v, p, m, module_prefab, part_prefab, vi, ec, elapsed_s);                  break;
-          case "FissionGenerator":             ProcessFissionGenerator(v, p, m, module_prefab, ec, elapsed_s);                              break;
-          case "ModuleRadioisotopeGenerator":  ProcessRadioisotopeGenerator(v, p, m, module_prefab, ec, elapsed_s);                         break;
-          case "ModuleCryoTank":               ProcessCryoTank(v, p, m, module_prefab, resources, elapsed_s);                               break;
+          case module_type.Reliability:           Reliability.BackgroundUpdate(v, p, m, module_prefab as Reliability);                        break;
+          case module_type.Experiment:            Experiment.BackgroundUpdate(v, m, module_prefab as Experiment, ec ,elapsed_s);              break;
+          case module_type.Greenhouse:            Greenhouse.BackgroundUpdate(v, m, module_prefab as Greenhouse, vi, resources, elapsed_s);   break;
+          case module_type.GravityRing:           GravityRing.BackgroundUpdate(v, p, m, module_prefab as GravityRing, ec, elapsed_s);         break;
+          case module_type.Emitter:               Emitter.BackgroundUpdate(v, p, m, module_prefab as Emitter, ec, elapsed_s);                 break;
+          case module_type.Harvester:             Harvester.BackgroundUpdate(v, m, module_prefab as Harvester, elapsed_s);                    break;
+          case module_type.Laboratory:            Laboratory.BackgroundUpdate(v, p, m, module_prefab as Laboratory, ec, elapsed_s);           break;
+          case module_type.Command:               ProcessCommand(v, p, m, module_prefab as ModuleCommand, resources, elapsed_s);              break;
+          case module_type.Panel:                 ProcessPanel(v, p, m, module_prefab as ModuleDeployableSolarPanel, vi, ec, elapsed_s);      break;
+          case module_type.Generator:             ProcessGenerator(v, p, m, module_prefab as ModuleGenerator, resources, elapsed_s);          break;
+          case module_type.Converter:             ProcessConverter(v, p, m, module_prefab as ModuleResourceConverter, resources, elapsed_s);  break;
+          case module_type.Drill:                 ProcessHarvester(v, p, m, module_prefab as ModuleResourceHarvester, resources, elapsed_s);  break;
+          case module_type.AsteroidDrill:         ProcessAsteroidDrill(v, p, m, module_prefab as ModuleAsteroidDrill, resources, elapsed_s);  break;
+          case module_type.StockLab:              ProcessStockLab(v, p, m, module_prefab as ModuleScienceConverter, ec, elapsed_s);           break;
+          case module_type.Light:                 ProcessLight(v, p, m, module_prefab as ModuleLight, ec, elapsed_s);                         break;
+          case module_type.Scanner:               ProcessScanner(v, p, m, module_prefab, part_prefab, vd, ec, elapsed_s);                     break;
+          case module_type.CurvedPanel:           ProcessCurvedPanel(v, p, m, module_prefab, part_prefab, vi, ec, elapsed_s);                 break;
+          case module_type.FissionGenerator:      ProcessFissionGenerator(v, p, m, module_prefab, ec, elapsed_s);                             break;
+          case module_type.RadioisotopeGenerator: ProcessRadioisotopeGenerator(v, p, m, module_prefab, ec, elapsed_s);                        break;
+          case module_type.CryoTank:              ProcessCryoTank(v, p, m, module_prefab, resources, elapsed_s);                              break;
         }
       }
     }
@@ -72,16 +137,13 @@ public sealed class Background
 
   static void ProcessCommand(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, ModuleCommand command, vessel_resources resources, double elapsed_s)
   {
-    // play nice with BackgroundProcessing
-    if (Kerbalism.detected_mods.BackgroundProcessing) return;
-
     // do not consume if this is a MCM with no crew
     // rationale: for consistency, the game doesn't consume resources for MCM without crew in loaded vessels
     //            this make some sense: you left a vessel with some battery and nobody on board, you expect it to not consume EC
     if (command.minimumCrew == 0 || p.protoModuleCrew.Count > 0)
     {
       // for each input resource
-      foreach(ModuleResource ir in command.inputResources)
+      foreach(ModuleResource ir in command.resHandler.inputResources)
       {
         // consume the resource
         resources.Consume(v, ir.name, ir.rate * elapsed_s);
@@ -94,31 +156,37 @@ public sealed class Background
   {
     // note: we ignore temperature curve, and make sure it is not relavant in the MM patch
     // note: we ignore power curve, that is used by no panel as far as I know
-
-    // play nice with BackgroundProcessing
-    if (Kerbalism.detected_mods.BackgroundProcessing) return;
+    // note: cylindrical and spherical panels are not supported
+    // note: we assume the tracking target is SUN
 
     // if in sunlight and extended
-    if (info.sunlight > double.Epsilon && m.moduleValues.GetValue("stateString") == "EXTENDED")
+    if (info.sunlight > double.Epsilon && m.moduleValues.GetValue("deployState") == "EXTENDED")
     {
-      // get panel normal direction
-      Vector3d normal = panel.part.FindModelComponent<Transform>(panel.raycastTransformName).forward;
+      // get panel normal/pivot dir in world space
+      Transform tr = panel.part.FindModelComponent<Transform>(panel.pivotName);
+      Vector3d dir = panel.isTracking ? tr.up : tr.forward;
+      dir = (v.transform.rotation * p.rotation * dir).normalized;
 
       // calculate cosine factor
-      // note: for gameplay reasons, we ignore tracking panel pivots
-      // note: a possible optimization here is to cache the transform lookup (unity was coded by monkeys)
-      double cosine_factor = panel.sunTracking ? 1.0 : Math.Max(Vector3d.Dot(info.sun_dir, (v.transform.rotation * p.rotation * normal).normalized), 0.0);
+      // - fixed panel: clamped cosine
+      // - tracking panel, tracking pivot enabled: around the pivot
+      // - tracking panel, tracking pivot disabled: assume perfect alignment
+      double cosine_factor =
+          !panel.isTracking
+        ? Math.Max(Vector3d.Dot(info.sun_dir, dir), 0.0)
+        : Settings.TrackingPivot
+        ? Math.Cos(1.57079632679 - Math.Acos(Vector3d.Dot(info.sun_dir, dir)))
+        : 1.0;
 
       // calculate normalized solar flux
-      // note: this include fractional sunlight if integrated over orbit
-      // note: this include atmospheric absorption if inside an atmosphere
+      // - this include fractional sunlight if integrated over orbit
+      // - this include atmospheric absorption if inside an atmosphere
       double norm_solar_flux = info.solar_flux / Sim.SolarFluxAtHome();
 
       // calculate output
-      double output = panel.chargeRate                                      // nominal panel charge rate at 1 AU
+      double output = panel.resHandler.outputResources[0].rate              // nominal panel charge rate at 1 AU
                     * norm_solar_flux                                       // normalized flux at panel distance from sun
-                    * cosine_factor                                         // cosine factor of panel orientation
-                    * Reliability.Penalty(p, "Panel");                      // malfunctioned panel penalty
+                    * cosine_factor;                                        // cosine factor of panel orientation
 
       // produce EC
       ec.Produce(output * elapsed_s);
@@ -128,33 +196,26 @@ public sealed class Background
 
   static void ProcessGenerator(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, ModuleGenerator generator, vessel_resources resources, double elapsed_s)
   {
-    // play nice with BackgroundProcessing
-    if (Kerbalism.detected_mods.BackgroundProcessing) return;
-
     // if active
     if (Lib.Proto.GetBool(m, "generatorIsActive"))
     {
-      // get malfunction penalty
-      double penalty = Reliability.Penalty(p, "Generator");
-
       // create and commit recipe
-      resource_recipe recipe = new resource_recipe(resource_recipe.converter_priority);
-      foreach(var ir in generator.inputList)
+      resource_recipe recipe = new resource_recipe();
+      foreach(ModuleResource ir in generator.resHandler.inputResources)
       {
         recipe.Input(ir.name, ir.rate * elapsed_s);
       }
-      foreach(var or in generator.outputList)
+      foreach(ModuleResource or in generator.resHandler.outputResources)
       {
-        recipe.Output(or.name, or.rate * penalty * elapsed_s);
+        recipe.Output(or.name, or.rate * elapsed_s);
       }
       resources.Transform(recipe);
     }
   }
 
 
-  static void ProcessConverter(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, Part part_prefab, int index, vessel_resources resources, double elapsed_s)
+  static void ProcessConverter(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, ModuleResourceConverter converter, vessel_resources resources, double elapsed_s)
   {
-    // note: support multiple resource converters
     // note: ignore stock temperature mechanic of converters
     // note: ignore autoshutdown
     // note: using hard-coded crew bonus values from the wiki because the module data make zero sense (DERP ALERT)
@@ -162,11 +223,7 @@ public sealed class Background
     // note: 'undo' stock behaviour by forcing lastUpdateTime to now (to minimize overlapping calculations from this and stock post-facto simulation)
     // note: support PlanetaryBaseSystem converters
     // note: support NearFuture reactors
-
-    // get converter
-    var converter_prefabs = part_prefab.Modules.GetModules<ModuleResourceConverter>();
-    if (index >= converter_prefabs.Count) return;
-    ModuleResourceConverter converter = converter_prefabs[index] as ModuleResourceConverter;
+    // note: assume dump overboard is false for all outputs
 
     // if active
     if (Lib.Proto.GetBool(m, "IsActivated"))
@@ -183,27 +240,29 @@ public sealed class Background
       // if not full
       if (!full)
       {
-        // get malfunction penalty
-        double penalty = Reliability.Penalty(p, "Converter");
-
         // deduce crew bonus
         int exp_level = -1;
         if (converter.UseSpecialistBonus)
         {
-          foreach(ProtoCrewMember c in v.protoVessel.GetVesselCrew())
-            exp_level = Math.Max(exp_level, c.trait == converter.Specialty ? c.experienceLevel : -1);
+          foreach(ProtoCrewMember c in Lib.CrewList(v))
+          {
+            if (c.experienceTrait.Effects.Find(k => k.Name == converter.ExperienceEffect) != null)
+            {
+              exp_level = Math.Max(exp_level, c.experienceLevel);
+            }
+          }
         }
         double exp_bonus = exp_level < 0 ? 1.0 : 5.0 + (double)exp_level * 4.0;
 
         // create and commit recipe
-        resource_recipe recipe = new resource_recipe(resource_recipe.converter_priority);
+        resource_recipe recipe = new resource_recipe();
         foreach(var ir in converter.inputList)
         {
           recipe.Input(ir.ResourceName, ir.Ratio * elapsed_s);
         }
         foreach(var or in converter.outputList)
         {
-          recipe.Output(or.ResourceName, or.Ratio * penalty * exp_bonus * elapsed_s);
+          recipe.Output(or.ResourceName, or.Ratio * exp_bonus * elapsed_s);
         }
         resources.Transform(recipe);
       }
@@ -229,15 +288,17 @@ public sealed class Background
       // note: comparing against previous amount
       if (resources.Info(v, harvester.ResourceName).level < harvester.FillAmount - double.Epsilon)
       {
-        // get malfunction penalty
-        double penalty = Reliability.Penalty(p, "Harvester");
-
         // deduce crew bonus
         int exp_level = -1;
         if (harvester.UseSpecialistBonus)
         {
-          foreach(ProtoCrewMember c in v.protoVessel.GetVesselCrew())
-            exp_level = Math.Max(exp_level, c.trait == harvester.Specialty ? c.experienceLevel : -1);
+          foreach(ProtoCrewMember c in Lib.CrewList(v))
+          {
+            if (c.experienceTrait.Effects.Find(k => k.Name == harvester.ExperienceEffect) != null)
+            {
+              exp_level = Math.Max(exp_level, c.experienceLevel);
+            }
+          }
         }
         double exp_bonus = exp_level < 0 ? 1.0 : 5.0 + (double)exp_level * 4.0;
 
@@ -258,12 +319,12 @@ public sealed class Background
         if (abundance > harvester.HarvestThreshold)
         {
           // create and commit recipe
-          resource_recipe recipe = new resource_recipe(resource_recipe.harvester_priority);
+          resource_recipe recipe = new resource_recipe();
           foreach(var ir in harvester.inputList)
           {
             recipe.Input(ir.ResourceName, ir.Ratio * elapsed_s);
           }
-          recipe.Output(harvester.ResourceName, abundance * harvester.Efficiency * exp_bonus * penalty * elapsed_s);
+          recipe.Output(harvester.ResourceName, abundance * harvester.Efficiency * exp_bonus * elapsed_s);
           resources.Transform(recipe);
         }
       }
@@ -311,8 +372,13 @@ public sealed class Background
           int exp_level = -1;
           if (asteroid_drill.UseSpecialistBonus)
           {
-            foreach(ProtoCrewMember c in v.protoVessel.GetVesselCrew())
-            exp_level = Math.Max(exp_level, c.trait == asteroid_drill.Specialty ? c.experienceLevel : -1);
+            foreach(ProtoCrewMember c in Lib.CrewList(v))
+            {
+              if (c.experienceTrait.Effects.Find(k => k.Name == asteroid_drill.ExperienceEffect) != null)
+              {
+                exp_level = Math.Max(exp_level, c.experienceLevel);
+              }
+            }
           }
           double exp_bonus = exp_level < 0 ? 1.0 : 5.0 + (double)exp_level * 4.0;
 
@@ -320,7 +386,7 @@ public sealed class Background
           double res_amount = abundance * asteroid_drill.Efficiency * exp_bonus * elapsed_s;
 
           // transform EC into mined resource
-          resource_recipe recipe = new resource_recipe(resource_recipe.harvester_priority);
+          resource_recipe recipe = new resource_recipe();
           recipe.Input("ElectricCharge", asteroid_drill.PowerConsumption * elapsed_s);
           recipe.Output(res_name, res_amount);
           resources.Transform(recipe);
@@ -341,7 +407,7 @@ public sealed class Background
   }
 
 
-  static void ProcessLab(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, ModuleScienceConverter lab, resource_info ec, double elapsed_s)
+  static void ProcessStockLab(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, ModuleScienceConverter lab, resource_info ec, double elapsed_s)
   {
     // note: we are only simulating the EC consumption
     // note: there is no easy way to 'stop' the lab when there isn't enough EC
@@ -364,7 +430,7 @@ public sealed class Background
   }
 
 
-  static void ProcessScanner(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, PartModule scanner, Part part_prefab, vessel_data vd, resource_info ec, double elapsed_s)
+  static void ProcessScanner(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot m, PartModule scanner, Part part_prefab, VesselData vd, resource_info ec, double elapsed_s)
   {
     // get ec consumption rate
     double power = SCANsat.EcConsumption(scanner);
@@ -382,18 +448,18 @@ public sealed class Background
       ec.Consume(power * elapsed_s);
 
       // if there isn't ec
-      // note: comparing against amount in previous simulation step
+      // - comparing against amount in previous simulation step
       if (ec.amount <= double.Epsilon)
       {
         // unregister scanner
-        SCANsat.stopScanner(v, m, part_prefab, scanner);
+        SCANsat.stopScanner(v, m, part_prefab);
         is_scanning = false;
 
         // remember disabled scanner
         vd.scansat_id.Add(p.flightID);
 
         // give the user some feedback
-        if (vd.cfg_ec == 1) Message.Post(Lib.BuildString("SCANsat sensor was disabled on <b>", v.vesselName, "</b>"));
+        if (vd.cfg_ec) Message.Post(Lib.BuildString("SCANsat sensor was disabled on <b>", v.vesselName, "</b>"));
       }
     }
     // if it was disabled in background
@@ -404,11 +470,11 @@ public sealed class Background
       if (ec.level > 0.25) //< re-enable at 25% EC
       {
         // re-enable the scanner
-        SCANsat.resumeScanner(v, m, part_prefab, scanner);
+        SCANsat.resumeScanner(v, m, part_prefab);
         is_scanning = true;
 
         // give the user some feedback
-        if (vd.cfg_ec == 1) Message.Post(Lib.BuildString("SCANsat sensor resumed operations on <b>", v.vesselName, "</b>"));
+        if (vd.cfg_ec) Message.Post(Lib.BuildString("SCANsat sensor resumed operations on <b>", v.vesselName, "</b>"));
       }
     }
 

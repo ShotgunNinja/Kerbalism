@@ -1,12 +1,4 @@
-﻿// ====================================================================================================================
-// collection of functions used to simulate the environment
-// ====================================================================================================================
-
-
-using System;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
-using UnityEngine;
+﻿using System;
 
 
 namespace KERBALISM {
@@ -116,19 +108,6 @@ public static class Sim
   }
 
 
-  // return time dilation effect due to special relativity
-  // multiply the return value by elapsed time according to the observer (eg: the one that measure mission time)
-  public static double TimeDilation(Vessel v)
-  {
-    if (!Settings.RelativisticTime) return 1.0;
-    if (Lib.Landed(v)) return 1.0;
-    double C = 299792458.0 * Settings.LightSpeedScale;
-    double V = v.orbit.orbitalSpeed;
-    if (double.IsNaN(V) || double.IsInfinity(V)) return 1.0;
-    return Math.Sqrt(1.0 - V * V / (C * C));
-  }
-
-
   // --------------------------------------------------------------------------
   // RAYTRACING
   // --------------------------------------------------------------------------
@@ -148,7 +127,7 @@ public static class Sim
 
     // the ray doesn't hit body if its minimal analytical distance along the ray is less than its radius
     // simplified from 'p + dir * k - body.position'
-    return k < 0.0 || k > dist || (dir * k - diff).magnitude > body.Radius ;
+    return k < 0.0 || k > dist || (dir * k - diff).magnitude > body.Radius;
   }
 
 
@@ -199,7 +178,7 @@ public static class Sim
     return Raytrace(pos_a, dir, dist, mainbody_a)
         && Raytrace(pos_a, dir, dist, mainbody_b)
         && (refbody_a == null || Raytrace(pos_a, dir, dist, refbody_a))
-        && (refbody_b == null || Raytrace(pos_b, dir, dist, refbody_b));
+        && (refbody_b == null || Raytrace(pos_a, dir, dist, refbody_b));
   }
 
 
@@ -266,9 +245,10 @@ public static class Sim
     double atmo_factor = AtmosphereFactor(body, 0.7071);
 
     // try to determine if this is a gas giant
-    bool is_gas_giant = body.Density / FlightGlobals.GetHomeBody().Density < 0.2;
+    // - old method: density less than 20% of home planet
+    bool is_gas_giant = !body.hasSolidSurface;
 
-    // try to determine if this is a greenhouse planet
+    // try to determine if this is a runaway greenhouse planet
     bool is_hell = atmo_factor < 0.5;
 
     // store heat capacity coefficients
@@ -388,7 +368,7 @@ public static class Sim
     // note: it is 0 before loading first vessel in a game session, we compute it in that case
     if (PhysicsGlobals.SolarLuminosity <= double.Epsilon)
     {
-      double A = FlightGlobals.GetHomeBody().orbit.semiMajorAxis;
+      double A = Lib.PlanetarySystem(FlightGlobals.GetHomeBody()).orbit.semiMajorAxis;
       return A * A * 12.566370614359172 * PhysicsGlobals.SolarLuminosityAtHome;
     }
     return PhysicsGlobals.SolarLuminosity;
@@ -413,8 +393,10 @@ public static class Sim
   }
 
   // return difference from survival temperature
-  public static double TempDiff(double k)
+  // - as a special case, there is no temp difference when landed on the home body
+  public static double TempDiff(double k, CelestialBody body, bool landed)
   {
+    if (body.flightGlobalsIndex == FlightGlobals.GetHomeBodyIndex() && landed) return 0.0;
     return Math.Max(Math.Abs(k - Settings.SurvivalTemperature) - Settings.SurvivalRange, 0.0);
   }
 
@@ -429,7 +411,7 @@ public static class Sim
   public static double AtmosphereFactor(CelestialBody body, Vector3d position, Vector3d sun_dir)
   {
     // get up vector & altitude
-    Vector3d up = (position - body.position);
+    Vector3d up = position - body.position;
     double altitude = up.magnitude;
     up /= altitude;
     altitude -= body.Radius;
@@ -512,9 +494,55 @@ public static class Sim
 
 
   // return true if inside a breathable atmosphere
-  public static bool Breathable(Vessel v)
+  public static bool Breathable(Vessel v, bool underwater)
   {
-    return v.mainBody.atmosphereContainsOxygen && v.mainBody.GetPressure(v.altitude) > 25.0 && !Underwater(v);
+    // atmosphere is breathable if:
+    // - vessel body is the home body
+    // - the body has an atmosphere, and it contain oxygen
+    // - the pressure is above 25kPA
+    // - the vessel is not underwater
+    CelestialBody body = v.mainBody;
+    return body == FlightGlobals.GetHomeBody()
+        && body.atmosphereContainsOxygen
+        && body.GetPressure(v.altitude) > 25.0
+        && !underwater;
+  }
+
+
+  // return pressure at sea level in kPA
+  public static double PressureAtSeaLevel()
+  {
+    // note: we could get the home body pressure at sea level, and deal with the case when it is atmosphere-less
+    // however this function can be called to generate part tooltips, and at that point the bodies are not ready
+    return 101.0;
+  }
+
+
+  // return true if vessel is inside the thermosphere
+  public static bool InsideThermosphere(Vessel v)
+  {
+    var body = v.mainBody;
+    return body.atmosphere && v.altitude > body.atmosphereDepth && v.altitude <= body.atmosphereDepth * 5.0;
+  }
+
+
+  // return true if vessel is inside the exosphere
+  public static bool InsideExosphere(Vessel v)
+  {
+    var body = v.mainBody;
+    return body.atmosphere && v.altitude > body.atmosphereDepth * 5.0 && v.altitude <= body.atmosphereDepth * 25.0;
+  }
+
+
+  // --------------------------------------------------------------------------
+  // GRAVIOLI
+  // --------------------------------------------------------------------------
+
+  public static double Graviolis(Vessel v)
+  {
+    double dist = Vector3d.Distance(v.GetWorldPos3D(), FlightGlobals.Bodies[0].position);
+    double au = dist / FlightGlobals.GetHomeBody().orbit.semiMajorAxis;
+    return 1.0 - Math.Min(au, 1.0); // 0 at 1AU -> 1 at sun position
   }
 }
 

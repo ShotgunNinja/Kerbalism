@@ -22,7 +22,7 @@ Shader "Custom/PointParticle"
       CGPROGRAM
       #pragma vertex vert
       #pragma fragment frag
-      #pragma target 3.0
+      #pragma target 2.5
 
       fixed4 POINT_COLOR;
       float POINT_SIZE;
@@ -34,7 +34,7 @@ Shader "Custom/PointParticle"
         float2 screen_coords : TEXCOORD1;
       };
 
-      v2f vert(float4 in_pos : POSITION, out float4 pos : POSITION)
+      v2f vert(float4 in_pos : POSITION, out float4 pos : SV_POSITION)
       {
         // output clip-space vertex position
         pos = mul(UNITY_MATRIX_MVP, in_pos);

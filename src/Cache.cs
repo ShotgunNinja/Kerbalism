@@ -1,9 +1,4 @@
-﻿// ====================================================================================================================
-// cache for vessel-related data, using a smart eviction strategy to decouple computation time per-step from number of vessels
-// ====================================================================================================================
-
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -11,12 +6,15 @@ using UnityEngine;
 namespace KERBALISM {
 
 
-
-public class vessel_info
+public sealed class vessel_info
 {
   public vessel_info(Vessel v, uint vessel_id, UInt64 inc)
   {
     // NOTE: anything used here can't in turn use cache, unless you know what you are doing
+
+    // NOTE: you can't cache vessel position
+    // at any point in time all vessel/body positions are relative to a different frame of reference
+    // so comparing the current position of a vessel, with the cached one of another make no sense
 
     // associate with an unique incremental id
     this.inc = inc;
@@ -26,11 +24,11 @@ public class vessel_info
     if (!is_vessel) return;
 
     // determine if this is a resque mission vessel
-    is_resque = Lib.IsResqueMission(v);
+    is_resque = Misc.IsResqueMission(v);
     if (is_resque) return;
 
     // dead EVA are not valid vessels
-    if (v.isEVA && EVA.KerbalData(v).eva_dead) return;
+    if (EVA.IsDead(v)) return;
 
     // shortcut for common tests
     is_valid = true;
@@ -42,98 +40,153 @@ public class vessel_info
     crew_count = Lib.CrewCount(v);
     crew_capacity = Lib.CrewCapacity(v);
 
-    // get vessel position once
-    position = Lib.VesselPosition(v);
+    // get vessel position
+    Vector3d position = Lib.VesselPosition(v);
+
+    // this should never happen again
+    if (Vector3d.Distance(position, v.mainBody.position) < 1.0)
+    {
+      throw new Exception("Shit hit the fan for vessel " + v.vesselName);
+    }
 
     // determine if in sunlight, calculate sun direction and distance
     sunlight = Sim.RaytraceBody(v, position, FlightGlobals.Bodies[0], out sun_dir, out sun_dist) ? 1.0 : 0.0;
 
-    // if the orbit length vs simulation step is lower than an acceptable threshold, use discrete sun visibility
-    if (v.mainBody.flightGlobalsIndex != 0)
+    // at the two highest timewarp speed, the number of sun visibility samples drop to the point that
+    // the quantization error first became noticeable, and then exceed 100%
+    // to solve this, we switch to an analytical estimation of the portion of orbit that was in sunlight
+    // - we check against timewarp rate, instead of index, to avoid issues during timewarp blending
+    if (v.mainBody.flightGlobalsIndex != 0 && TimeWarp.CurrentRate > 1000.0f)
     {
-      double orbit_period = Sim.OrbitalPeriod(v);
-      if (orbit_period / Kerbalism.elapsed_s < 16.0) sunlight = 1.0 - Sim.ShadowPeriod(v) / orbit_period;
+      sunlight = 1.0 - Sim.ShadowPeriod(v) / Sim.OrbitalPeriod(v);
     }
 
-    // calculate environment stuff
+    // environment stuff
     atmo_factor = Sim.AtmosphereFactor(v.mainBody, position, sun_dir);
     gamma_transparency = Sim.GammaTransparency(v.mainBody, v.altitude);
-    breathable = Sim.Breathable(v);
+    underwater = Sim.Underwater(v);
+    breathable = Sim.Breathable(v, underwater);
     landed = Lib.Landed(v);
 
-    // calculate temperature at vessel position
+    // temperature at vessel position
     temperature = Sim.Temperature(v, position, sunlight, atmo_factor, out solar_flux, out albedo_flux, out body_flux, out total_flux);
+    temp_diff = Sim.TempDiff(temperature, v.mainBody, landed);
 
-    // calculate radiation
-    radiation = Radiation.Compute(v, position, gamma_transparency, sunlight, out blackout, out inside_pause, out inside_belt);
+    // radiation
+    radiation = Radiation.Compute(v, position, gamma_transparency, sunlight, out blackout, out magnetosphere, out inner_belt, out outer_belt, out interstellar);
+    
+    // extended atmosphere
+    thermosphere = Sim.InsideThermosphere(v);
+    exosphere = Sim.InsideExosphere(v);
 
-    // calculate malfunction stuff
-    max_malfunction = Reliability.MaxMalfunction(v);
-    avg_quality = Reliability.AverageQuality(v);
+    // malfunction stuff
+    malfunction = Reliability.HasMalfunction(v);
+    critical = Reliability.HasCriticalFailure(v);
 
-    // calculate signal info
-    antenna = new antenna_data(v);
+    // signal info
+    antenna = new AntennaInfo(v);
     avoid_inf_recursion.Add(v.id);
-    link = Signal.Link(v, position, antenna, blackout, avoid_inf_recursion);
+    connection = Signal.connection(v, position, antenna, blackout, avoid_inf_recursion);
+    transmitting = Science.transmitting(v, connection.linked);
+    relaying = Signal.relaying(v, avoid_inf_recursion);
     avoid_inf_recursion.Remove(v.id);
 
-    // partial data about modules, used by vessel info/monitor
-    scrubbers = Scrubber.PartialData(v);
-    recyclers = Recycler.PartialData(v);
-    greenhouses = Greenhouse.PartialData(v);
+    // habitat data
+    volume = Habitat.tot_volume(v);
+    surface = Habitat.tot_surface(v);
+    pressure = Habitat.pressure(v);
+    poisoning = Habitat.poisoning(v);
+    shielding = Habitat.shielding(v);
+    living_space = Habitat.living_space(v);
+    comforts = new Comforts(v, landed, crew_count > 1, connection.linked);
 
-    // woot relativity
-    time_dilation = Sim.TimeDilation(v);
+    // data about greenhouses
+    greenhouses = Greenhouse.Greenhouses(v);
+    
+    // other stuff
+    gravioli = Sim.Graviolis(v);
   }
 
 
-  public UInt64   inc;                // unique incremental id for the entry
-  public bool     is_vessel;          // true if this is a valid vessel
-  public bool     is_resque;          // true if this is a resque mission vessel
-  public bool     is_valid;           // equivalent to (is_vessel && !is_resque && !eva_dead)
-  public UInt32   id;                 // generate the id once
-  public int      crew_count;         // number of crew on the vessel
-  public int      crew_capacity;      // crew capacity of the vessel
-  public Vector3d position;           // vessel position
-  public double   sunlight;           // if the vessel is in direct sunlight
-  public Vector3d sun_dir;            // normalized vector from vessel to sun
-  public double   sun_dist;           // distance from vessel to sun
-  public double   solar_flux;         // solar flux at vessel position
-  public double   albedo_flux;        // solar flux reflected from the nearest body
-  public double   body_flux;          // infrared radiative flux from the nearest body
-  public double   total_flux;         // total flux at vessel position
-  public double   temperature;        // vessel temperature
-  public double   radiation;          // environment radiation at vessel position
-  public bool     inside_pause;       // true if vessel is inside a magnetopause (except the heliosphere)
-  public bool     inside_belt;        // true if vessel is inside a radiation belt
-  public bool     blackout;           // true if the vessel is inside a magnetopause (except the sun) and under storm
-  public double   atmo_factor;        // proportion of flux not blocked by atmosphere
-  public double   gamma_transparency; // proportion of ionizing radiation not blocked by atmosphere
-  public bool     breathable;         // true if inside breathable atmosphere
-  public bool     landed;             // true if on the surface of a body
-  public uint     max_malfunction;    // max malfunction level among all vessel modules
-  public double   avg_quality;        // average manufacturing quality among all vessel modules
-  public antenna_data antenna;        // best antenna/relay data
-  public link_data link;              // link data
-  static HashSet<Guid> avoid_inf_recursion = new HashSet<Guid>(); // used to avoid infinite recursion while calculating link data
-  public List<Scrubber.partial_data> scrubbers;       // partial module data
-  public List<Recycler.partial_data> recyclers;       // ..
-  public List<Greenhouse.partial_data> greenhouses;   // ..
-  public double   time_dilation;      // time dilation effect according to special relativity
+  public UInt64       inc;                  // unique incremental id for the entry
+  public bool         is_vessel;            // true if this is a valid vessel
+  public bool         is_resque;            // true if this is a resque mission vessel
+  public bool         is_valid;             // equivalent to (is_vessel && !is_resque && !eva_dead)
+  public UInt32       id;                   // generate the id once
+  public int          crew_count;           // number of crew on the vessel
+  public int          crew_capacity;        // crew capacity of the vessel
+  public double       sunlight;             // if the vessel is in direct sunlight
+  public Vector3d     sun_dir;              // normalized vector from vessel to sun
+  public double       sun_dist;             // distance from vessel to sun
+  public double       solar_flux;           // solar flux at vessel position
+  public double       albedo_flux;          // solar flux reflected from the nearest body
+  public double       body_flux;            // infrared radiative flux from the nearest body
+  public double       total_flux;           // total flux at vessel position
+  public double       temperature;          // vessel temperature
+  public double       temp_diff;            // difference between external and survival temperature
+  public double       radiation;            // environment radiation at vessel position
+  public bool         magnetosphere;        // true if vessel is inside a magnetopause (except the heliosphere)
+  public bool         inner_belt;           // true if vessel is inside a radiation belt
+  public bool         outer_belt;           // true if vessel is inside a radiation belt
+  public bool         interstellar;         // true if vessel is outside sun magnetopause
+  public bool         blackout;             // true if the vessel is inside a magnetopause (except the sun) and under storm
+  public bool         thermosphere;         // true if vessel is inside thermosphere
+  public bool         exosphere;            // true if vessel is inside exosphere
+  public double       atmo_factor;          // proportion of flux not blocked by atmosphere
+  public double       gamma_transparency;   // proportion of ionizing radiation not blocked by atmosphere
+  public bool         underwater;           // true if inside ocean
+  public bool         breathable;           // true if inside breathable atmosphere
+  public bool         landed;               // true if on the surface of a body
+  public bool         malfunction;          // true if at least a component has malfunctioned or had a critical failure
+  public bool         critical;             // true if at least a component had a critical failure
+  public AntennaInfo  antenna;              // antenna info
+  public ConnectionInfo connection;         // connection info
+  public string       transmitting;         // name of file being transmitted, or empty
+  public string       relaying;             // name of file being relayed, or empty
+  public double       volume;               // enabled volume in m^3
+  public double       surface;              // enabled surface in m^2
+  public double       pressure;             // normalized pressure
+  public double       poisoning;            // waste atmosphere amount versus total atmosphere amount
+  public double       shielding;            // shielding level
+  public double       living_space;         // living space factor
+  public Comforts     comforts;             // comfort info
+  public List<Greenhouse.data> greenhouses; // some data about greenhouses
+  public double       gravioli;             // gravitation gauge particles detected (joke)
+
+  // used to avoid infinite recursion while calculating connection info
+  static HashSet<Guid> avoid_inf_recursion = new HashSet<Guid>();
 }
 
 
-public sealed class Cache
+public static class Cache
 {
-  // ctor
-  public Cache()
+  public static void init()
   {
-    // enable global access
-    instance = this;
+    vessels = new Dictionary<uint, vessel_info>();
+    next_inc = 0;
   }
 
 
-  public void update()
+  public static void clear()
+  {
+    vessels.Clear();
+    next_inc = 0;
+  }
+
+
+  public static void purge(Vessel v)
+  {
+    vessels.Remove(Lib.VesselID(v));
+  }
+
+
+  public static void purge(ProtoVessel pv)
+  {
+    vessels.Remove(Lib.VesselID(pv));
+  }
+
+
+  public static void update()
   {
     // purge the oldest entry from the vessel cache
     UInt64 oldest_inc = UInt64.MaxValue;
@@ -157,39 +210,30 @@ public sealed class Cache
 
     // get the info from the cache, if it exist
     vessel_info info;
-    if (instance.vessels.TryGetValue(id, out info)) return info;
+    if (vessels.TryGetValue(id, out info)) return info;
 
     // compute vessel info
-    info = new vessel_info(v, id, instance.next_inc++);
+    info = new vessel_info(v, id, next_inc++);
 
     // store vessel info in the cache
-    instance.vessels.Add(id, info);
+    vessels.Add(id, info);
 
     // return the vessel info
     return info;
   }
 
 
-  public static vessel_info TryGetVesselInfo(Vessel v)
+  public static bool HasVesselInfo(Vessel v, out vessel_info vi)
   {
-    // get vessel id
-    UInt32 id = Lib.VesselID(v);
-
-    // get the info from the cache, if it exist
-    // if it doesn't, don't create it and return null
-    vessel_info info;
-    return instance.vessels.TryGetValue(id, out info) ? info : null;
+    return vessels.TryGetValue(Lib.VesselID(v), out vi);
   }
 
 
   // vessel cache
-  Dictionary<UInt32, vessel_info> vessels = new Dictionary<UInt32, vessel_info>(512);
+  static Dictionary<UInt32, vessel_info> vessels;
 
   // used to generate unique id
-  UInt64 next_inc;
-
-  // permit global access
-  static Cache instance;
+  static UInt64 next_inc;
 }
 
 

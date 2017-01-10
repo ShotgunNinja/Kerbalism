@@ -19,7 +19,7 @@ Shader "Custom/AntiAliasedLine"
       CGPROGRAM
       #pragma vertex vert
       #pragma fragment frag
-      #pragma target 3.0
+      #pragma target 2.5
 
       struct v2f
       {
@@ -28,7 +28,7 @@ Shader "Custom/AntiAliasedLine"
         float pos_z : NORMAL;
       };
 
-      v2f vert(float4 in_pos : POSITION, half4 color : COLOR, float2 txcoord : TEXCOORD0, out float4 pos : POSITION)
+      v2f vert(float4 in_pos : POSITION, half4 color : COLOR, float2 txcoord : TEXCOORD0, out float4 pos : SV_POSITION)
       {
         pos = mul(UNITY_MATRIX_MVP, in_pos);
 

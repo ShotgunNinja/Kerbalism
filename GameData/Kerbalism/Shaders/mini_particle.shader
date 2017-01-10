@@ -20,13 +20,14 @@ Shader "Custom/MiniParticle"
       CGPROGRAM
       #pragma vertex vert
       #pragma fragment frag
+      #pragma target 2.0
 
       fixed4 POINT_COLOR;
 
       struct v2f
       {
         float size : PSIZE;
-        float4 pos : POSITION;
+        float4 pos : SV_POSITION;
       };
 
       v2f vert(float4 in_pos : POSITION)
