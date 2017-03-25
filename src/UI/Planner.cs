@@ -202,7 +202,7 @@ public sealed class Planner
     string atmosphere_tooltip = Lib.BuildString
     (
       "<align=left />",
-      "breathable\t\t<b>", (env.body.atmosphereContainsOxygen ? "yes" : "no"), "</b>\n",
+      "breathable\t\t<b>", Sim.Breathable(env.body) ? "yes" : "no", "</b>\n",
       "pressure\t\t<b>", Lib.HumanReadablePressure(env.body.atmospherePressureSeaLevel), "</b>\n",
       "light absorption\t\t<b>", Lib.HumanReadablePerc(1.0 - env.atmo_factor), "</b>\n",
       "gamma absorption\t<b>", Lib.HumanReadablePerc(1.0 - Sim.GammaTransparency(env.body, 0.0)), "</b>"
@@ -581,7 +581,7 @@ public sealed class environment_analyzer
     this.body = body;
     altitude = body.Radius * altitude_mult;
     landed = altitude <= double.Epsilon;
-    breathable = body == FlightGlobals.GetHomeBody() && body.atmosphereContainsOxygen && landed;
+    breathable = Sim.Breathable(body) && landed;
     atmo_factor = Sim.AtmosphereFactor(body, 0.7071);
     sun_dist = Sim.Apoapsis(Lib.PlanetarySystem(body)) - sun.Radius - body.Radius;
     Vector3d sun_dir = (sun.position - body.position).normalized;
@@ -666,6 +666,19 @@ public sealed class vessel_analyzer
     crew_engineer = crew.Find(k => k.trait == "Engineer") != null;
     crew_scientist = crew.Find(k => k.trait == "Scientist") != null;
     crew_pilot = crew.Find(k => k.trait == "Pilot") != null;
+
+    crew_engineer_maxlevel = 0;
+    crew_scientist_maxlevel = 0;
+    crew_pilot_maxlevel = 0;
+    foreach (ProtoCrewMember c in crew)
+    {
+      switch(c.trait)
+      {
+        case "Engineer":  crew_engineer_maxlevel = Math.Max(crew_engineer_maxlevel, (uint)c.experienceLevel); break;
+        case "Scientist": crew_scientist_maxlevel = Math.Max(crew_scientist_maxlevel, (uint)c.experienceLevel); break;
+        case "Pilot":     crew_pilot_maxlevel = Math.Max(crew_pilot_maxlevel, (uint)c.experienceLevel); break;
+      }
+    }
 
     // scan the parts
     crew_capacity = 0;
@@ -865,6 +878,9 @@ public sealed class vessel_analyzer
   public bool   crew_engineer;                          // true if an engineer is among the crew
   public bool   crew_scientist;                         // true if a scientist is among the crew
   public bool   crew_pilot;                             // true if a pilot is among the crew
+  public uint   crew_engineer_maxlevel;                 // experience level of top enginner on board
+  public uint   crew_scientist_maxlevel;                // experience level of top scientist on board
+  public uint   crew_pilot_maxlevel;                    // experience level of top pilot on board
 
   // habitat
   public double volume;                                 // total volume in m^3
@@ -960,9 +976,9 @@ public class resource_simulator
           case "ModuleCommand":                process_command(m as ModuleCommand);                     break;
           case "ModuleDeployableSolarPanel":   process_panel(m as ModuleDeployableSolarPanel, env);     break;
           case "ModuleGenerator":              process_generator(m as ModuleGenerator, p);              break;
-          case "ModuleResourceConverter":      process_converter(m as ModuleResourceConverter);         break;
-          case "ModuleKPBSConverter":          process_converter(m as ModuleResourceConverter);         break;
-          case "ModuleResourceHarvester":      process_harvester(m as ModuleResourceHarvester);         break;
+          case "ModuleResourceConverter":      process_converter(m as ModuleResourceConverter, va);     break;
+          case "ModuleKPBSConverter":          process_converter(m as ModuleResourceConverter, va);     break;
+          case "ModuleResourceHarvester":      process_harvester(m as ModuleResourceHarvester, va);     break;
           case "ModuleScienceConverter":       process_stocklab(m as ModuleScienceConverter);           break;
           case "ModuleActiveRadiator":         process_radiator(m as ModuleActiveRadiator);             break;
           case "ModuleWheelMotor":             process_wheel_motor(m as ModuleWheelMotor);              break;
@@ -1192,29 +1208,49 @@ public class resource_simulator
   }
 
 
-  void process_converter(ModuleResourceConverter converter)
+  void process_converter(ModuleResourceConverter converter, vessel_analyzer va)
   {
-    simulated_recipe recipe = new simulated_recipe("converter");
+    // calculate experience bonus
+    float exp_bonus = converter.UseSpecialistBonus
+      ? converter.EfficiencyBonus * (converter.SpecialistBonusBase + (converter.SpecialistEfficiencyFactor * (va.crew_engineer_maxlevel + 1)))
+      : 1.0f;
+
+    // use part name as recipe name
+    // - include crew bonus in the recipe name
+    string recipe_name = Lib.BuildString(converter.part.partInfo.title, " (efficiency: ", Lib.HumanReadablePerc(exp_bonus), ")");
+
+    // generate recipe
+    simulated_recipe recipe = new simulated_recipe(recipe_name);
     foreach(ResourceRatio res in converter.inputList)
     {
-      recipe.input(res.ResourceName, res.Ratio);
+      recipe.input(res.ResourceName, res.Ratio * exp_bonus);
     }
     foreach(ResourceRatio res in converter.outputList)
     {
-      recipe.output(res.ResourceName, res.Ratio, res.DumpExcess);
+      recipe.output(res.ResourceName, res.Ratio * exp_bonus, res.DumpExcess);
     }
     recipes.Add(recipe);
   }
 
 
-  void process_harvester(ModuleResourceHarvester harvester)
+  void process_harvester(ModuleResourceHarvester harvester, vessel_analyzer va)
   {
-    simulated_recipe recipe = new simulated_recipe("harvester");
+    // calculate experience bonus
+    float exp_bonus = harvester.UseSpecialistBonus
+      ? harvester.EfficiencyBonus * (harvester.SpecialistBonusBase + (harvester.SpecialistEfficiencyFactor * (va.crew_engineer_maxlevel + 1)))
+      : 1.0f;
+
+    // use part name as recipe name
+    // - include crew bonus in the recipe name
+    string recipe_name = Lib.BuildString(harvester.part.partInfo.title, " (efficiency: ", Lib.HumanReadablePerc(exp_bonus), ")");
+
+    // generate recipe
+    simulated_recipe recipe = new simulated_recipe(recipe_name);
     foreach(ResourceRatio res in harvester.inputList)
     {
       recipe.input(res.ResourceName, res.Ratio);
     }
-    recipe.output(harvester.ResourceName, harvester.Efficiency, true);
+    recipe.output(harvester.ResourceName, harvester.Efficiency * exp_bonus, true);
     recipes.Add(recipe);
   }
 
