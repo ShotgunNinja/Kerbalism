@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -54,9 +54,10 @@ public sealed class Planner
     Profile.supplies.FindAll(k => k.resource != "ElectricCharge").ForEach(k => panel_resource.Add(k.resource));
 
     // special panels
+    // - stress & radiation panels require that a rule using the living_space/radiation modifier exist (current limitation)
     panel_special = new List<string>();
-    if (Features.LivingSpace) panel_special.Add("qol");
-    if (Features.Radiation) panel_special.Add("radiation");
+    if (Features.LivingSpace && Profile.rules.Find(k => k.modifiers.Contains("living_space")) != null) panel_special.Add("qol");
+    if (Features.Radiation && Profile.rules.Find(k => k.modifiers.Contains("radiation")) != null) panel_special.Add("radiation");
     if (Features.Reliability) panel_special.Add("reliability");
     if (Features.Signal) panel_special.Add("signal");
 
@@ -88,8 +89,8 @@ public sealed class Planner
 
       // analyze
       env.analyze(body, altitude_mult, sunlight);
-      sim.analyze(parts, env, va);
       va.analyze(parts, sim, env);
+      sim.analyze(parts, env, va);
 
       // ec panel
       render_ec(panel);
@@ -201,7 +202,7 @@ public sealed class Planner
     string atmosphere_tooltip = Lib.BuildString
     (
       "<align=left />",
-      "breathable\t\t<b>", (env.body.atmosphereContainsOxygen ? "yes" : "no"), "</b>\n",
+      "breathable\t\t<b>", Sim.Breathable(env.body) ? "yes" : "no", "</b>\n",
       "pressure\t\t<b>", Lib.HumanReadablePressure(env.body.atmospherePressureSeaLevel), "</b>\n",
       "light absorption\t\t<b>", Lib.HumanReadablePerc(1.0 - env.atmo_factor), "</b>\n",
       "gamma absorption\t<b>", Lib.HumanReadablePerc(1.0 - Sim.GammaTransparency(env.body, 0.0)), "</b>"
@@ -253,7 +254,7 @@ public sealed class Planner
   void render_stress(Panel p)
   {
     // get first living space rule
-    // - guaranteed to exist, as this panel is not rendered without Feature.LivingSpace (that's detected by living space modifier)
+    // - guaranteed to exist, as this panel is not rendered if it doesn't
     // - even without crew, it is safe to evaluate the modifiers that use it
     Rule rule = Profile.rules.Find(k => k.modifiers.Contains("living_space"));
 
@@ -301,7 +302,7 @@ public sealed class Planner
   void render_radiation(Panel p)
   {
     // get first radiation rule
-    // - guaranteed to exist, as this panel is not rendered without Feature.Radiation (that's detected by radiation modifier)
+    // - guaranteed to exist, as this panel is not rendered if it doesn't
     // - even without crew, it is safe to evaluate the modifiers that use it
     Rule rule = Profile.rules.Find(k => k.modifiers.Contains("radiation"));
 
@@ -580,7 +581,7 @@ public sealed class environment_analyzer
     this.body = body;
     altitude = body.Radius * altitude_mult;
     landed = altitude <= double.Epsilon;
-    breathable = body == FlightGlobals.GetHomeBody() && body.atmosphereContainsOxygen && landed;
+    breathable = Sim.Breathable(body) && landed;
     atmo_factor = Sim.AtmosphereFactor(body, 0.7071);
     sun_dist = Sim.Apoapsis(Lib.PlanetarySystem(body)) - sun.Radius - body.Radius;
     Vector3d sun_dir = (sun.position - body.position).normalized;
@@ -639,6 +640,13 @@ public sealed class vessel_analyzer
 {
   public void analyze(List<Part> parts, resource_simulator sim, environment_analyzer env)
   {
+    // note: vessel analysis require resource analysis, but at the same time resource analysis
+    // require vessel analysis, so we are using resource analysis from previous frame (that's okay)
+    // in the past, it was the other way around - however that triggered a corner case when va.comforts
+    // was null (because the vessel analysis was still never done) and some specific rule/process
+    // in resource analysis triggered an exception, leading to the vessel analysis never happening
+    // inverting their order avoided this corner-case
+
     analyze_crew(parts);
     analyze_habitat(sim);
     analyze_radiation(parts, sim);
@@ -659,12 +667,16 @@ public sealed class vessel_analyzer
     crew_scientist = crew.Find(k => k.trait == "Scientist") != null;
     crew_pilot = crew.Find(k => k.trait == "Pilot") != null;
 
-    engineer_maxlevel = 0;
-    foreach (ProtoCrewMember pcm in crew)
+    crew_engineer_maxlevel = 0;
+    crew_scientist_maxlevel = 0;
+    crew_pilot_maxlevel = 0;
+    foreach (ProtoCrewMember c in crew)
     {
-      if (pcm.trait == "Engineer" && pcm.experienceLevel > engineer_maxlevel)
+      switch(c.trait)
       {
-        engineer_maxlevel = (uint)pcm.experienceLevel;
+        case "Engineer":  crew_engineer_maxlevel = Math.Max(crew_engineer_maxlevel, (uint)c.experienceLevel); break;
+        case "Scientist": crew_scientist_maxlevel = Math.Max(crew_scientist_maxlevel, (uint)c.experienceLevel); break;
+        case "Pilot":     crew_pilot_maxlevel = Math.Max(crew_pilot_maxlevel, (uint)c.experienceLevel); break;
       }
     }
 
@@ -866,7 +878,9 @@ public sealed class vessel_analyzer
   public bool   crew_engineer;                          // true if an engineer is among the crew
   public bool   crew_scientist;                         // true if a scientist is among the crew
   public bool   crew_pilot;                             // true if a pilot is among the crew
-  public uint   engineer_maxlevel;                      // experience level of the best engineer among the crew
+  public uint   crew_engineer_maxlevel;                 // experience level of top enginner on board
+  public uint   crew_scientist_maxlevel;                // experience level of top scientist on board
+  public uint   crew_pilot_maxlevel;                    // experience level of top pilot on board
 
   // habitat
   public double volume;                                 // total volume in m^3
@@ -907,9 +921,6 @@ public class resource_simulator
 {
   public void analyze(List<Part> parts, environment_analyzer env, vessel_analyzer va)
   {
-    // note: resource analysis require vessel analysis, but at the same time vessel analysis
-    // require resource analysis, so we are using vessel analysis from previous frame (that's okay)
-
     // clear previous resource state
     resources.Clear();
 
@@ -1199,29 +1210,24 @@ public class resource_simulator
 
   void process_converter(ModuleResourceConverter converter, vessel_analyzer va)
   {
-    string tooltip = converter.part.partInfo.title;
-    float engineerBonus = 1.0f;
-    if (converter.UseSpecialistBonus)
-    {
-      if (va.crew_engineer)
-      {
-        engineerBonus = converter.EfficiencyBonus * (converter.SpecialistBonusBase + (converter.SpecialistEfficiencyFactor * (va.engineer_maxlevel + 1)));
-        tooltip = tooltip + " (engineer efficiency : " + engineerBonus.ToString("p1") + ")";
-      }
-      else
-      {
-        engineerBonus = converter.EfficiencyBonus * converter.SpecialistBonusBase;
-        tooltip = tooltip + " (no engineer : " + engineerBonus.ToString("p1") + " efficiency)";
-      }
-    } 
-    simulated_recipe recipe = new simulated_recipe(tooltip);
+    // calculate experience bonus
+    float exp_bonus = converter.UseSpecialistBonus
+      ? converter.EfficiencyBonus * (converter.SpecialistBonusBase + (converter.SpecialistEfficiencyFactor * (va.crew_engineer_maxlevel + 1)))
+      : 1.0f;
+
+    // use part name as recipe name
+    // - include crew bonus in the recipe name
+    string recipe_name = Lib.BuildString(converter.part.partInfo.title, " (efficiency: ", Lib.HumanReadablePerc(exp_bonus), ")");
+
+    // generate recipe
+    simulated_recipe recipe = new simulated_recipe(recipe_name);
     foreach(ResourceRatio res in converter.inputList)
     {
-      recipe.input(res.ResourceName, res.Ratio * engineerBonus);
+      recipe.input(res.ResourceName, res.Ratio * exp_bonus);
     }
     foreach(ResourceRatio res in converter.outputList)
     {
-      recipe.output(res.ResourceName, res.Ratio * engineerBonus, res.DumpExcess);
+      recipe.output(res.ResourceName, res.Ratio * exp_bonus, res.DumpExcess);
     }
     recipes.Add(recipe);
   }
@@ -1229,27 +1235,22 @@ public class resource_simulator
 
   void process_harvester(ModuleResourceHarvester harvester, vessel_analyzer va)
   {
-    string tooltip = harvester.part.partInfo.title;
-    float engineerBonus = 1.0f;
-    if (harvester.UseSpecialistBonus)
-      {
-      if (va.crew_engineer)
-      {
-        engineerBonus = harvester.EfficiencyBonus * (harvester.SpecialistBonusBase + (harvester.SpecialistEfficiencyFactor * (va.engineer_maxlevel + 1)));
-        tooltip = tooltip + " (engineer efficiency : " + engineerBonus.ToString("p1") + ")";
-      }
-      else
-      {
-        engineerBonus = harvester.EfficiencyBonus * harvester.SpecialistBonusBase;
-        tooltip = tooltip + " (no engineer : " + engineerBonus.ToString("p1") + " efficiency)";
-      }
-    }
-    simulated_recipe recipe = new simulated_recipe(tooltip);
+    // calculate experience bonus
+    float exp_bonus = harvester.UseSpecialistBonus
+      ? harvester.EfficiencyBonus * (harvester.SpecialistBonusBase + (harvester.SpecialistEfficiencyFactor * (va.crew_engineer_maxlevel + 1)))
+      : 1.0f;
+
+    // use part name as recipe name
+    // - include crew bonus in the recipe name
+    string recipe_name = Lib.BuildString(harvester.part.partInfo.title, " (efficiency: ", Lib.HumanReadablePerc(exp_bonus), ")");
+
+    // generate recipe
+    simulated_recipe recipe = new simulated_recipe(recipe_name);
     foreach(ResourceRatio res in harvester.inputList)
     {
       recipe.input(res.ResourceName, res.Ratio);
     }
-    recipe.output(harvester.ResourceName, harvester.Efficiency, true);
+    recipe.output(harvester.ResourceName, harvester.Efficiency * exp_bonus, true);
     recipes.Add(recipe);
   }
 

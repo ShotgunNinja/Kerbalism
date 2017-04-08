@@ -10,13 +10,16 @@ public static class Telemetry
 {
   public static void telemetry(this Panel p, Vessel v)
   {
-    // if vessel doesn't exist anymore
-    if (FlightGlobals.FindVessel(v.id) == null) return;
+    // avoid corner-case when this is called in a lambda after scene changes
+    v = FlightGlobals.FindVessel(v.id);
+
+    // if vessel doesn't exist anymore, leave the panel empty
+    if (v == null) return;
 
     // get info from the cache
     vessel_info vi = Cache.VesselInfo(v);
 
-    // if not a valid vessel
+    // if not a valid vessel, leave the panel empty
     if (!vi.is_valid) return;
 
     // set metadata
@@ -113,7 +116,7 @@ public static class Telemetry
       if (supplies == 0) p.section("SUPPLIES");
 
       // rate tooltip
-      string rate_tooltip = Math.Abs(res.rate) >= 0.0000001 ? Lib.BuildString
+      string rate_tooltip = Math.Abs(res.rate) >= 1e-10 ? Lib.BuildString
       (
         res.rate > 0.0 ? "<color=#00ff00><b>" : "<color=#ff0000><b>",
         Lib.HumanReadableRate(Math.Abs(res.rate)),
@@ -205,14 +208,14 @@ public static class Telemetry
         : "growing";
 
       // tooltip with summary
-      string tooltip = Lib.BuildString
+      string tooltip = greenhouse.growth < 0.99 ? Lib.BuildString
       (
         "<align=left />",
         "time to harvest\t<b>", Lib.HumanReadableDuration(greenhouse.tta), "</b>\n",
         "growth\t\t<b>", Lib.HumanReadablePerc(greenhouse.growth), "</b>\n",
         "natural lighting\t<b>", Lib.HumanReadableFlux(greenhouse.natural), "</b>\n",
         "artificial lighting\t<b>", Lib.HumanReadableFlux(greenhouse.artificial), "</b>"
-      );
+      ) : string.Empty;
 
       // render it
       p.content(Lib.BuildString("crop #", (i + 1).ToString()), state, tooltip);
