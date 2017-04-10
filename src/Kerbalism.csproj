@@ -189,6 +189,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>xcopy D:\ksp\kerbalism\Kerbalism\obj\Release\Kerbalism.dll C:\Games\KSP\GameData\Kerbalism\ /y</PostBuildEvent>
+    <PostBuildEvent>if $(ConfigurationName)==Debug ("$(ProjectDir)..\buildscripts\UnityDebug\prepare-debug.bat" "$(OutDir)")
+if $(ConfigurationName)==Release ("$(ProjectDir)..\buildscripts\ZipPack\build-package.bat" "C:\Games\KSP\GameData\Kerbalism\")</PostBuildEvent>
   </PropertyGroup>
 </Project>
