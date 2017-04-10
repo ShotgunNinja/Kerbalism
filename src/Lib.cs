@@ -103,15 +103,11 @@ public static class Lib
     return rng.NextDouble();
   }
 
-  // return random float in [-1,+1] range
-  // note: it is less random than the c# RNG, but is way faster
-  static int fast_float_seed = 1;
+  // return random float in range -1.0 to 1.0
   public static float FastRandomFloat()
   {
-    fast_float_seed *= 16807;
-    return (float)fast_float_seed * 4.6566129e-010f;
+    return (float)(rng.NextDouble()-0.5)*2;
   }
-
 
   // --- HASH -----------------------------------------------------------------
 
