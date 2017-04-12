@@ -56,16 +56,24 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
     while(count-- > 0) setups.Add(new ConfigureSetup(archive));
 
     // parse configuration from string data
-    archive = new ReadArchive(cfg);
-    archive.load(out count);
-    selected = new List<string>(count);
-    while(count-- > 0) { string s; archive.load(out s); selected.Add(s); }
+    // - we avoid corner case when cfg was never set up (because craft was never in VAB)
+    selected = new List<string>();
+    if (!string.IsNullOrEmpty(cfg))
+    {
+      archive = new ReadArchive(cfg);
+      archive.load(out count);
+      while(count-- > 0) { string s; archive.load(out s); selected.Add(s); }
+    }
 
     // parse previous configuration from string data
-    archive = new ReadArchive(prev_cfg);
-    archive.load(out count);
-    prev_selected = new List<string>(count);
-    while(count-- > 0) { string s; archive.load(out s); prev_selected.Add(s); }
+    // - we avoid corner case when prev_cfg was never set up (because craft was never in VAB)
+    prev_selected = new List<string>();
+    if (!string.IsNullOrEmpty(prev_cfg))
+    {
+      archive = new ReadArchive(prev_cfg);
+      archive.load(out count);
+      while(count-- > 0) { string s; archive.load(out s); prev_selected.Add(s); }
+    }
 
     // default title to part name
     if (title.Length == 0) title = Lib.PartName(part);
@@ -113,14 +121,6 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
       archive.save(0);
       prev_cfg = archive.serialize();
     }
-
-    // special care for users of version 1.1.5pre1
-    if (string.IsNullOrEmpty(prev_cfg))
-    {
-      var archive = new WriteArchive();
-      archive.save(0);
-      prev_cfg = archive.serialize();
-    }
   }
 
 
@@ -147,7 +147,9 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
 
     // make sure configuration include all available slots
     // this also create default configuration
-    if (Lib.IsEditor())
+    // - we don it only in the editor
+    // - we avoid corner case when cfg was never set up (because craft was never in VAB)
+    if (Lib.IsEditor() || selected.Count == 0)
     {
       while(selected.Count < Math.Min(slots, (uint)unlocked.Count))
       {
