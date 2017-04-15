@@ -50,7 +50,7 @@ public static class API
     KerbalData kd = DB.Kerbal(k_name);
     foreach(Rule rule in Profile.rules)
     {
-      if (rule.modifiers.Contains("radiation"))
+      if (rule.modifiers.Contains("radiation") || rule.modifiers_degen.Contains("radiation"))
       {
         RuleData rd = kd.rules[rule.name];
         rd.problem = Math.Max(rd.problem + amount, 0.0);

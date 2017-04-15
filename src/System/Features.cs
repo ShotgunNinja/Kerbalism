@@ -25,6 +25,7 @@ public static class Features
     foreach(Rule rule in Profile.rules)
     {
       foreach(string s in rule.modifiers) modifiers.Add(s);
+      foreach(string s in rule.modifiers_degen) modifiers.Add(s);
     }
     foreach(Process process in Profile.processes)
     {

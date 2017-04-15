@@ -56,8 +56,8 @@ public sealed class Planner
     // special panels
     // - stress & radiation panels require that a rule using the living_space/radiation modifier exist (current limitation)
     panel_special = new List<string>();
-    if (Features.LivingSpace && Profile.rules.Find(k => k.modifiers.Contains("living_space")) != null) panel_special.Add("qol");
-    if (Features.Radiation && Profile.rules.Find(k => k.modifiers.Contains("radiation")) != null) panel_special.Add("radiation");
+    if (Features.LivingSpace && Profile.rules.Find(k => k.modifiers.Contains("living_space") || k.modifiers_degen.Contains("living_space")) != null) panel_special.Add("qol");
+    if (Features.Radiation && Profile.rules.Find(k => k.modifiers.Contains("radiation") || k.modifiers_degen.Contains("radiation")) != null) panel_special.Add("radiation");
     if (Features.Reliability) panel_special.Add("reliability");
     if (Features.Signal) panel_special.Add("signal");
 
@@ -256,46 +256,70 @@ public sealed class Planner
     // get first living space rule
     // - guaranteed to exist, as this panel is not rendered if it doesn't
     // - even without crew, it is safe to evaluate the modifiers that use it
-    Rule rule = Profile.rules.Find(k => k.modifiers.Contains("living_space"));
+    Rule rule = Profile.rules.Find(k => k.modifiers.Contains("living_space") || k.modifiers_degen.Contains("living_space"));
 
     // render title
     p.section("STRESS", string.Empty, () => p.prev(ref special_index, panel_special.Count), () => p.next(ref special_index, panel_special.Count));
 
+    bool use_comfort = rule.modifiers.Contains("comfort") || rule.modifiers_degen.Contains("comfort");
+    bool use_pressure = rule.modifiers.Contains("pressure") || rule.modifiers_degen.Contains("pressure");
+
     // render living space data
     // generate details tooltips
-    string living_space_tooltip = Lib.BuildString
-    (
-      "volume per-capita: <b>", Lib.HumanReadableVolume(va.volume / (double)Math.Max(va.crew_count, 1)), "</b>\n",
-      "ideal living space: <b>", Lib.HumanReadableVolume(Settings.IdealLivingSpace), "</b>"
-    );
+    string volume_per_capita = Lib.HumanReadableVolume(va.volume / (double)Math.Max(va.crew_count, 1));
+    string ideal_living_space = Lib.HumanReadableVolume(Settings.IdealLivingSpace);
+    string living_space_tooltip = string.Empty;
+    if (use_comfort && use_pressure)
+    {
+      living_space_tooltip = Lib.BuildString
+      (
+        "volume per-capita: <b>", volume_per_capita, "</b>\n",
+        "ideal living space: <b>", ideal_living_space, "</b>"
+      );
+    }
+    else if (use_comfort || use_pressure)
+    {
+      living_space_tooltip = Lib.BuildString
+      (
+        "ideal living space: <b>", ideal_living_space, "</b>"
+      );
+    }
     p.content("living space", Habitat.living_space_to_string(va.living_space), living_space_tooltip);
 
     // render comfort data
-    if (rule.modifiers.Contains("comfort"))
+    if (use_comfort)
     {
       p.content("comfort", va.comforts.summary(), va.comforts.tooltip());
     }
-    else
-    {
-      p.content("comfort", "n/a");
-    }
 
     // render pressure data
-    if (rule.modifiers.Contains("pressure"))
+    if (use_pressure)
     {
       string pressure_tooltip = va.pressurized
         ? "Free roaming in a pressurized environment is\nvastly superior to living in a suit."
         : "Being forced inside a suit all the time greatly\nreduce the crew quality of life.\nThe worst part is the diaper.";
       p.content("pressurized", va.pressurized ? "yes" : "no", pressure_tooltip);
     }
-    else
+
+    // if pressure/comfort are absent, use the empty space to render volume per-capita & ideal living space
+    if (!use_comfort && !use_pressure)
     {
-      p.content("pressurized", "n/a");
+      p.content("volume per-capita", volume_per_capita);
+      p.content("ideal living space", ideal_living_space);
+    }
+    else if (!use_comfort || !use_pressure)
+    {
+      p.content("volume per-capita", volume_per_capita, living_space_tooltip);
     }
 
     // render life estimate
-    double mod = Modifiers.evaluate(env, va, sim, rule.modifiers);
-    p.content("duration", Lib.HumanReadableDuration(rule.fatal_threshold / (rule.degeneration * mod)));
+    double mod = rule.modifiers_degen.Count > 0 ? Modifiers.evaluate(env, va, sim, rule.modifiers_degen) : Modifiers.evaluate(env, va, sim, rule.modifiers);
+    if (rule.input != string.Empty)
+    {
+      simulated_resource res = sim.resource(rule.input);
+      mod += res.lifetime();
+    }
+    p.content("time to breakdown", Lib.HumanReadableDuration(rule.fatal_threshold / (rule.degeneration * mod)));
   }
 
 
