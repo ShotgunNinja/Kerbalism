@@ -317,9 +317,12 @@ public sealed class Planner
     if (rule.input != string.Empty)
     {
       simulated_resource res = sim.resource(rule.input);
-      mod += res.lifetime();
+      p.content("time to breakdown", Lib.HumanReadableDuration((rule.fatal_threshold / (rule.degeneration * mod)) + res.lifetime()));
     }
-    p.content("time to breakdown", Lib.HumanReadableDuration(rule.fatal_threshold / (rule.degeneration * mod)));
+    else
+    {
+      p.content("time to breakdown", Lib.HumanReadableDuration(rule.fatal_threshold / (rule.degeneration * mod)));
+    }
   }
 
 
