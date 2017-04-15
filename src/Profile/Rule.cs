@@ -18,6 +18,7 @@ public sealed class Rule
     degeneration = Lib.ConfigValue(node, "degeneration", 0.0);
     variance = Lib.ConfigValue(node, "variance", 0.0);
     modifiers = Lib.Tokenize(Lib.ConfigValue(node, "modifier", string.Empty), ',');
+    modifiers_degen = Lib.Tokenize(Lib.ConfigValue(node, "modifier_degen", string.Empty), ',');
     breakdown = Lib.ConfigValue(node, "breakdown", false);
     warning_threshold = Lib.ConfigValue(node, "warning_threshold", 0.33);
     danger_threshold = Lib.ConfigValue(node, "danger_threshold", 0.66);
@@ -60,9 +61,10 @@ public sealed class Rule
 
     // get product of all environment modifiers
     double k = Modifiers.evaluate(v, vi, resources, modifiers);
+    double k_degen = modifiers_degen.Count > 0 ? Modifiers.evaluate(v, vi, resources, modifiers_degen) : k;
 
     // for each crew
-    foreach(ProtoCrewMember c in Lib.CrewList(v))
+    foreach (ProtoCrewMember c in Lib.CrewList(v))
     {
       // get kerbal data
       KerbalData kd = DB.Kerbal(c.name);
@@ -132,10 +134,10 @@ public sealed class Rule
         // degenerate:
         // - if the environment modifier is not telling to reset (by being zero)
         // - if this rule is resource-less, or if there was not enough resource in the vessel
-        if (k > 0.0 && (input.Length == 0 || res.amount <= double.Epsilon))
+        if (k_degen > 0.0 && (input.Length == 0 || res.amount <= double.Epsilon))
         {
           rd.problem += degeneration           // degeneration rate per-second or per-interval
-                     * k                       // product of environment modifiers
+                     * k_degen                 // product of environment modifiers
                      * step                    // seconds elapsed or by number of steps
                      * Variance(c, variance);  // kerbal-specific variance
         }
@@ -209,23 +211,24 @@ public sealed class Rule
   }
 
 
-  public string name;               // unique name for the rule
-  public string input;              // resource consumed, if any
-  public string output;             // resource produced, if any
-  public double interval;           // if 0 the rule is executed per-second, else it is executed every 'interval' seconds
-  public double rate;               // amount of input resource to consume at each execution
-  public double ratio;              // ratio of output resource in relation to input consumed
-  public double degeneration;       // amount to add to the property at each execution (when we must degenerate)
-  public double variance;           // variance for property rate, unique per-kerbal and in range [1.0-variance, 1.0+variance]
-  public List<string> modifiers;    // if specified, rates are influenced by the product of all environment modifiers
-  public bool   breakdown;          // if true, trigger a breakdown instead of killing the kerbal
-  public double warning_threshold;  // threshold of degeneration used to show warning messages and yellow status color
-  public double danger_threshold;   // threshold of degeneration used to show danger messages and red status color
-  public double fatal_threshold;    // threshold of degeneration used to show fatal messages and kill/breakdown the kerbal
-  public string warning_message;    // messages shown on threshold crossings
-  public string danger_message;     // .
-  public string fatal_message;      // .
-  public string relax_message;      // .
+  public string name;                   // unique name for the rule
+  public string input;                  // resource consumed, if any
+  public string output;                 // resource produced, if any
+  public double interval;               // if 0 the rule is executed per-second, else it is executed every 'interval' seconds
+  public double rate;                   // amount of input resource to consume at each execution
+  public double ratio;                  // ratio of output resource in relation to input consumed
+  public double degeneration;           // amount to add to the property at each execution (when we must degenerate)
+  public double variance;               // variance for property rate, unique per-kerbal and in range [1.0-variance, 1.0+variance]
+  public List<string> modifiers;        // if specified, rates are influenced by the product of all environment modifiers
+  public List<string> modifiers_degen;  // if specified, degeneration rate use this separate set of environment modifiers
+  public bool   breakdown;              // if true, trigger a breakdown instead of killing the kerbal
+  public double warning_threshold;      // threshold of degeneration used to show warning messages and yellow status color
+  public double danger_threshold;       // threshold of degeneration used to show danger messages and red status color
+  public double fatal_threshold;        // threshold of degeneration used to show fatal messages and kill/breakdown the kerbal
+  public string warning_message;        // messages shown on threshold crossings
+  public string danger_message;         // .
+  public string fatal_message;          // .
+  public string relax_message;          // .
 }
 
 
