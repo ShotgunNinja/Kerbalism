@@ -60,7 +60,7 @@ public static class Modifiers
           break;
           
         case "crew_count":
-          k *= (double)va.crew_count;
+          k *= (double)vi.crew_count;
           break;
 
         default:
