@@ -20,7 +20,15 @@ public static class Modifiers
           break;
 
         case "temperature":
-          k *= vi.temp_diff;
+          k *= Math.Abs(vi.temp_diff);
+          break;
+
+        case "mod_temperature_pos":
+          k *= vi.temp_diff > 0.0 ? 1.0 : 0.0;
+          break;
+
+        case "mod_temperature_neg":
+          k *= vi.temp_diff < 0.0 ? 1.0 : 0.0;
           break;
 
         case "radiation":
@@ -47,6 +55,10 @@ public static class Modifiers
           k /= vi.comforts.factor;
           break;
 
+        case "mod_comfort_space_limiter":
+          k *= vi.comforts.factor * ((1 - vi.comforts.factor) + (vi.living_space));
+          break;
+
         case "pressure":
           k *= vi.pressure > Settings.PressureThreshold ? 1.0 : Settings.PressureFactor;
           break;
@@ -57,6 +69,15 @@ public static class Modifiers
 
         case "per_capita":
           k /= (double)Math.Max(vi.crew_count, 1);
+          break;
+
+        case "crew_count":
+          k *= (double)vi.crew_count;
+          break;
+
+        case "inverse":
+          double i = 1.0 / k;
+          k = double.IsInfinity(i) || double.IsNaN(i) ? 0.0 : i;
           break;
 
         default:
@@ -80,7 +101,15 @@ public static class Modifiers
           break;
 
         case "temperature":
-          k *= env.temp_diff;
+          k *= Math.Abs(env.temp_diff);
+          break;
+
+        case "mod_temperature_pos":
+          k *= env.temp_diff > 0.0 ? 1.0 : 0.0;
+          break;
+
+        case "mod_temperature_neg":
+          k *= env.temp_diff < 0.0 ? 1.0 : 0.0;
           break;
 
         case "radiation":
@@ -107,6 +136,10 @@ public static class Modifiers
           k /= va.comforts.factor;
           break;
 
+        case "mod_comfort_space_limiter":
+          k *= va.comforts.factor * ((1 - va.comforts.factor) + (va.living_space));
+          break;
+
         case "pressure":
           k *= va.pressurized ? 1.0 : Settings.PressureFactor;
           break;
@@ -117,6 +150,15 @@ public static class Modifiers
 
         case "per_capita":
           k /= (double)Math.Max(va.crew_count, 1);
+          break;
+
+        case "crew_count":
+          k *= (double)va.crew_count;
+          break;
+
+        case "inverse":
+          double i = 1.0 / k;
+          k = double.IsInfinity(i) || double.IsNaN(i) ? 0.0 : i;
           break;
 
         default:

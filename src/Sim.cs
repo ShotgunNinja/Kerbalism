@@ -397,7 +397,9 @@ public static class Sim
   public static double TempDiff(double k, CelestialBody body, bool landed)
   {
     if (body.flightGlobalsIndex == FlightGlobals.GetHomeBodyIndex() && landed) return 0.0;
-    return Math.Max(Math.Abs(k - Settings.SurvivalTemperature) - Settings.SurvivalRange, 0.0);
+    return (k - Settings.SurvivalTemperature) > 0 ? 
+        Math.Max(k - Settings.SurvivalTemperature - Settings.SurvivalRange, 0.0): 
+        Math.Min(k - Settings.SurvivalTemperature + Settings.SurvivalRange, 0.0);
   }
 
 

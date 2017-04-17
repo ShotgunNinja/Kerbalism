@@ -150,15 +150,22 @@ public sealed class Comforts
   {
     const string yes = "<b><color=#00ff00>yes</color></b>";
     const string no = "<b><color=#ff0000>no</color></b>";
-    return Lib.BuildString
-    (
-      "<align=left />",
-      "firm ground\t", firm_ground ? yes : no, "\n",
-      "exercise\t\t", exercise ? yes : no, "\n",
-      "not alone\t", not_alone ? yes : no, "\n",
-      "call home\t", call_home ? yes : no, "\n",
-      "panorama\t", panorama ? yes : no
-    );
+
+    List<string> factors = new List<string>();
+    factors.Add("<align=left />");
+    if (Settings.ComfortFirmGround > double.Epsilon) factors.Add(Lib.BuildString("firm ground\t", firm_ground ? yes : no));
+    if (Settings.ComfortExercise > double.Epsilon) factors.Add(Lib.BuildString("exercise\t\t", exercise ? yes : no));
+    if (Settings.ComfortNotAlone > double.Epsilon) factors.Add(Lib.BuildString("not alone\t", not_alone ? yes : no));
+    if (Settings.ComfortCallHome > double.Epsilon) factors.Add(Lib.BuildString("call home\t", call_home ? yes : no));
+    if (Settings.ComfortPanorama > double.Epsilon) factors.Add(Lib.BuildString("panorama\t", panorama ? yes : no));
+
+    string tooltip_text = string.Empty;
+    for (int i = 0; i < factors.Count; i++)
+    {
+      if (i > 1) tooltip_text += "\n";
+      tooltip_text += factors[i];
+    }
+    return tooltip_text;
   }
 
   public string summary()
