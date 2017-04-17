@@ -1,4 +1,4 @@
-﻿#if false
+﻿#if KERBALISM_PROFILER
 
 using System;
 using System.Collections.Generic;
@@ -67,9 +67,6 @@ public sealed class Profiler : MonoBehaviour
     // enable global access
     instance = this;
 
-    // keep it alive
-    DontDestroyOnLoad(this);
-
     // generate unique id, hopefully
     win_id = Lib.RandomInt(int.MaxValue);
 
@@ -80,23 +77,34 @@ public sealed class Profiler : MonoBehaviour
     drag_rect = new Rect(0.0f, 0.0f, width, top_height);
 
     // setup styles
-    win_style = new GUIStyle(HighLogic.Skin.window);
-    win_style.padding.top = 0;
-    win_style.padding.bottom = 0;
-    top_style = new GUIStyle();
-    top_style.fixedHeight = top_height;
-    top_style.fontStyle = FontStyle.Bold;
-    top_style.alignment = TextAnchor.MiddleCenter;
-    name_style = new GUIStyle();
-    name_style.fontSize = 10;
-    name_style.fixedWidth = 150.0f;
-    name_style.stretchWidth = false;
-    value_style = new GUIStyle(name_style);
-    value_style.fixedWidth = 75.0f;
-    value_style.alignment = TextAnchor.MiddleRight;
-
+    win_style=new GUIStyle(HighLogic.Skin.window);
+    top_style=new GUIStyle();
+    name_style=new GUIStyle();
+    value_style=new GUIStyle();
   }
 
+  //  Awake is called only once when the script instance is being loaded. Used in place of the constructor for initialization.
+  void Awake()
+  {
+    if (instance==null) return;
+
+    // keep it alive
+    DontDestroyOnLoad(instance);
+
+    // setup styles
+    instance.win_style.padding.top=0;
+    instance.win_style.padding.bottom=0;
+    instance.top_style.fixedHeight=top_height;
+    instance.top_style.fontStyle=FontStyle.Bold;
+    instance.top_style.alignment=TextAnchor.MiddleCenter;
+    instance.name_style.fontSize=10;
+    instance.name_style.fixedWidth=150.0f;
+    instance.name_style.stretchWidth=false;
+    instance.value_style.fontSize=10;
+    instance.value_style.fixedWidth=75.0f;
+    instance.value_style.stretchWidth=false;
+    instance.value_style.alignment=TextAnchor.MiddleRight;
+  }
 
   // called every frame
   public void OnGUI()
