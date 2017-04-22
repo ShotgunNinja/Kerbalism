@@ -349,6 +349,43 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
   }
 
 
+  // return net environnement related flux for the vessel habitat (Watt)
+  public static double env_flux(double surface, double temperature)
+  {
+    return
+    // incoming flux :
+    (
+      PhysicsGlobals.StefanBoltzmanConstant * Settings.VesselAbsorptivity * surface
+      *
+      (
+        // solar + albedo + body + background flux for exposed surface
+        (Math.Pow(temperature, 4) * Settings.ExposedSurfaceFactor) 
+        +
+        // background flux for non-exposed surface
+        (Math.Pow(Sim.BlackBodyTemperature(Sim.BackgroundFlux()), 4) * (1 - Settings.ExposedSurfaceFactor))
+      )
+    )
+    -
+    // outgoing (radiative) flux :
+    (
+      PhysicsGlobals.StefanBoltzmanConstant * Settings.VesselEmissivity * surface
+      *
+      (
+        // flux for exposed surface
+        (Math.Pow(Math.Max(temperature, Settings.SurvivalTemperature), 4) * Settings.ExposedSurfaceFactor) 
+        +
+        // flux for non-exposed surface
+        (Math.Pow(Settings.SurvivalTemperature, 4) * (1 - Settings.ExposedSurfaceFactor))
+      )
+    );
+  }
+  
+  // return incoming flux due to crew bodies (Watt)
+  public static double kerbal_flux(Vessel v)
+  {
+    return Lib.CrewCount(v) * Settings.KerbalHeat; // kerbal bodies heat production
+  }
+
   // habitat state
   public enum State
   {

@@ -98,6 +98,7 @@ public sealed class vessel_info
     poisoning = Habitat.poisoning(v);
     shielding = Habitat.shielding(v);
     living_space = Habitat.living_space(v);
+    net_flux = Habitat.env_flux(surface, temperature) + Habitat.kerbal_flux(v);
     comforts = new Comforts(v, landed, crew_count > 1, connection.linked);
 
     // data about greenhouses
@@ -124,6 +125,7 @@ public sealed class vessel_info
   public double       total_flux;           // total flux at vessel position
   public double       temperature;          // vessel temperature
   public double       temp_diff;            // difference between external and survival temperature
+  public double       net_flux;             // habitat net thermal flux (W)
   public double       radiation;            // environment radiation at vessel position
   public bool         magnetosphere;        // true if vessel is inside a magnetopause (except the heliosphere)
   public bool         inner_belt;           // true if vessel is inside a radiation belt

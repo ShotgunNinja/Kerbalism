@@ -733,6 +733,9 @@ public sealed class vessel_analyzer
 
     // determine if the vessel has scrubbing capabilities
     scrubbed = sim.resource("WasteAtmosphere").consumed > 0.0;
+
+    // calculate habitat net thermal flux (W)
+    net_flux = Habitat.env_flux(surface, env.temperature) + (crew_count * Settings.KerbalHeat);
   }
 
 
@@ -914,6 +917,7 @@ public sealed class vessel_analyzer
   public double surface;                                // total surface in m^2
   public bool   pressurized;                            // true if the vessel has pressure control capabilities
   public bool   scrubbed;                               // true if the vessel has co2 scrubbing capabilities
+  public double net_flux;                               // habitat net thermal flux (W)
 
   // radiation related
   public double emitted;                                // amount of radiation emitted by components

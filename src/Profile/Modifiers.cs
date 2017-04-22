@@ -23,12 +23,12 @@ public static class Modifiers
           k *= Math.Abs(vi.temp_diff);
           break;
 
-        case "mod_temperature_pos":
-          k *= vi.temp_diff > 0.0 ? 1.0 : 0.0;
+        case "pos_flux":
+          k *= vi.net_flux > 0.0 ? vi.net_flux : 0.0;
           break;
 
-        case "mod_temperature_neg":
-          k *= vi.temp_diff < 0.0 ? 1.0 : 0.0;
+        case "neg_flux":
+          k *= vi.net_flux < 0.0 ? Math.Abs(vi.net_flux) : 0.0;
           break;
 
         case "radiation":
@@ -104,12 +104,12 @@ public static class Modifiers
           k *= Math.Abs(env.temp_diff);
           break;
 
-        case "mod_temperature_pos":
-          k *= env.temp_diff > 0.0 ? 1.0 : 0.0;
+        case "pos_flux":
+          k *= va.net_flux > 0.0 ? va.net_flux : 0.0;
           break;
 
-        case "mod_temperature_neg":
-          k *= env.temp_diff < 0.0 ? 1.0 : 0.0;
+        case "neg_flux":
+          k *= va.net_flux < 0.0 ? Math.Abs(va.net_flux) : 0.0;
           break;
 
         case "radiation":
