@@ -84,7 +84,7 @@ public sealed class Profiler : MonoBehaviour
   }
 
   //  Awake is called only once when the script instance is being loaded. Used in place of the constructor for initialization.
-  void Awake()
+  public void Awake()
   {
     if (instance==null) return;
 
