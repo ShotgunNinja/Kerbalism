@@ -675,7 +675,7 @@ public sealed class vessel_analyzer
     // inverting their order avoided this corner-case
 
     analyze_crew(parts);
-    analyze_habitat(sim);
+    analyze_habitat(sim, env);
     analyze_radiation(parts, sim);
     analyze_reliability(parts);
     analyze_signal(parts, env);
@@ -720,7 +720,7 @@ public sealed class vessel_analyzer
   }
 
 
-  void analyze_habitat(resource_simulator sim)
+  void analyze_habitat(resource_simulator sim, environment_analyzer env)
   {
     // calculate total volume
     volume = sim.resource("Atmosphere").capacity;

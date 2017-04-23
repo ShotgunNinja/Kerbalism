@@ -1100,6 +1100,37 @@ public static class Lib
   }
 
   // note: the resource must exist
+  public static void SetResourceAmount(Part p, string res_name, double amount)
+  {
+    // if the resource is not in the part, log a warning and do nothing
+    if (!p.Resources.Contains(res_name))
+    {
+      Lib.Log(Lib.BuildString("error while setting capacity for ", res_name, ": the resource is not in the part"));
+      return;
+    }
+
+    // set amount and clamp to capacity
+    var res = p.Resources[res_name];
+    res.amount = Math.Min(amount, res.maxAmount);
+  }
+
+  // note: the resource must exist
+  public static void SetResourceAmount(Part p, string res_name, double amount, double capacity)
+  {
+    // if the resource is not in the part, log a warning and do nothing
+    if (!p.Resources.Contains(res_name))
+    {
+      Lib.Log(Lib.BuildString("error while setting capacity for ", res_name, ": the resource is not in the part"));
+      return;
+    }
+
+    // set amount and clamp to capacity
+    var res = p.Resources[res_name];
+    res.maxAmount = capacity;
+    res.amount = Math.Min(amount, capacity);
+  }
+
+  // note: the resource must exist
   public static void SetResourceCapacity(Part p, string res_name, double capacity)
   {
     // if the resource is not in the part, log a warning and do nothing
@@ -1443,6 +1474,21 @@ public static class Lib
 
   public static class Proto
   {
+    public static Vector3 GetVector3(ProtoPartModuleSnapshot m, string name, Vector3 def_value = default(Vector3))
+    {
+      string[] s = m.moduleValues.GetValue(name).Split(","[0]);
+      if (s == null) return def_value;
+      if (s.Length > 3) return def_value;
+
+      float[] vc = new float[3];
+      for (int i = 0; i < s.Length; i++)
+      {
+        if (!float.TryParse(s[i], out vc[i])) return def_value;
+        if (!float.IsNaN(vc[i]) && !float.IsInfinity(vc[i])) return def_value;
+      }
+      return new Vector3(vc[0], vc[1], vc[2]);
+    }
+
     public static bool GetBool(ProtoPartModuleSnapshot m, string name, bool def_value = false)
     {
       bool v;
