@@ -997,6 +997,7 @@ public class resource_simulator
 
         switch(m.moduleName)
         {
+          case "Radiator":                     process_radiator(m as Radiator, env);                    break;
           case "Greenhouse":                   process_greenhouse(m as Greenhouse, env, va);            break;
           case "GravityRing":                  process_ring(m as GravityRing);                          break;
           case "Emitter":                      process_emitter(m as Emitter);                           break;
@@ -1110,6 +1111,46 @@ public class resource_simulator
     }
     recipes.Add(recipe);
   }
+
+  void process_radiator(Radiator r, environment_analyzer env)
+    {
+      // assume the sun and mainbody are at a 45° angle in the editor
+      Vector3d sun_dir = new Vector3d(0.7, 0.7, 0.0);
+      Vector3d body_dir = new Vector3d(0.7, -0.7, 0.0);
+
+      if (!r.running) { return; }
+      // calculate net flux (W)
+      r.cooling_rate = Radiator.GetRadiatorFlux
+      (
+        body_dir, // body_dir
+        sun_dir, // sun_dir 
+        r.GetFacingDirectionLoaded(sun_dir), // radiator_dir
+        env.body_flux, // body_flux
+        env.albedo_flux, // albedo_flux
+        env.solar_flux, // solar_flux
+        env.temperature, // env_temperature
+        env.body.GetPressure(Math.Max(env.altitude, 0.0)), // env_pressure
+        r.surface,
+        r.radiator_type,
+        r.emissivity,
+        r.coolant_temperature);
+
+      // calculate input rate
+      r.input_rate = Radiator.GetInputRate(
+        r.cooling_rate,
+        r.coolant_temperature,
+        r.temperature_min,
+        r.temperature_max,
+        r.input_rate_min,
+        r.input_rate_max);
+
+      simulated_recipe recipe = new simulated_recipe("coolant radiators");
+      // consume input at fixed rate
+      recipe.input(r.input_resource, r.input_rate);
+      // produce coolant (1 unit/s = 1kW)
+      recipe.output(r.output_resource, r.cooling_rate, false);
+      recipes.Add(recipe);
+    }
 
 
   void process_greenhouse(Greenhouse g, environment_analyzer env, vessel_analyzer va)

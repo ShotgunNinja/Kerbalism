@@ -5,7 +5,7 @@ using System.Text;
 using System.IO;
 using System.Diagnostics;
 using UnityEngine;
-
+using System.Globalization;
 
 namespace KERBALISM {
 
@@ -1476,15 +1476,19 @@ public static class Lib
   {
     public static Vector3 GetVector3(ProtoPartModuleSnapshot m, string name, Vector3 def_value = default(Vector3))
     {
-      string[] s = m.moduleValues.GetValue(name).Split(","[0]);
+      string s = m.moduleValues.GetValue(name);
       if (s == null) return def_value;
-      if (s.Length > 3) return def_value;
+
+      string[] sa = s
+          .Substring(s.IndexOf("(") + 1, s.IndexOf(")") - 1)
+          .Split(","[0]);
+      if (sa.Length > 3) return def_value;
 
       float[] vc = new float[3];
-      for (int i = 0; i < s.Length; i++)
+      for (int i = 0; i < sa.Length; i++)
       {
-        if (!float.TryParse(s[i], out vc[i])) return def_value;
-        if (!float.IsNaN(vc[i]) && !float.IsInfinity(vc[i])) return def_value;
+        if (!float.TryParse(sa[i], NumberStyles.Float, CultureInfo.InvariantCulture, out vc[i])) return def_value;
+        if (float.IsNaN(vc[i]) || float.IsInfinity(vc[i])) return def_value;
       }
       return new Vector3(vc[0], vc[1], vc[2]);
     }
