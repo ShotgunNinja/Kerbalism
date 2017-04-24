@@ -28,6 +28,11 @@ public sealed class Window
     tooltip = new Tooltip();
   }
 
+  public void load()
+  {
+      win_rect.Set(DB.UIdata.popout_window_left, DB.UIdata.popout_window_top, win_rect.width, win_rect.height);
+  }
+
   public void open(Action<Panel> refresh)
   {
     this.refresh = refresh;
@@ -75,6 +80,10 @@ public sealed class Window
     win_rect.xMax += offset_x;
     win_rect.yMin += offset_y;
     win_rect.yMax += offset_y;
+
+    // store the window position to DB
+    DB.UIdata.popout_window_left = win_rect.xMin;
+    DB.UIdata.popout_window_top = win_rect.yMin;
 
     // draw the window
     win_rect = GUILayout.Window(win_id, win_rect, draw_window, "", Styles.win);

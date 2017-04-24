@@ -59,6 +59,9 @@ public sealed class Kerbalism : ScenarioModule
       savegame_uid = DB.uid;
     }
 
+    // load UI data
+    UI.load();
+
     // force CommNet off when signal is enabled
     HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet &= !Features.Signal;
   }
