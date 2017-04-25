@@ -734,8 +734,17 @@ public sealed class vessel_analyzer
     // determine if the vessel has scrubbing capabilities
     scrubbed = sim.resource("WasteAtmosphere").consumed > 0.0;
 
+      // calculate environnement (solar/body/albedo/background) flux (W)
+      env_flux = Habitat.env_flux(surface, env.temperature);
+
+      // calculate heat produced by kerbal bodies (W)
+      crew_flux = Habitat.kerbal_flux((int) crew_count);
+
+      // calculate atmospheric convection/conduction flux (W)
+      atmo_flux = Habitat.atmo_flux(env.body, env.altitude, surface, env.temperature);
+
     // calculate habitat net thermal flux (W)
-    net_flux = Habitat.env_flux(surface, env.temperature) + (crew_count * Settings.KerbalHeat);
+      net_flux = env_flux + crew_flux + atmo_flux;
 
     // habitat temperature degeneration factor
     hab_temp = Habitat.hab_temp(volume, net_flux);             
@@ -919,7 +928,10 @@ public sealed class vessel_analyzer
   public double volume;                                 // total volume in m^3
   public double surface;                                // total surface in m^2
   public bool   pressurized;                            // true if the vessel has pressure control capabilities
-  public bool   scrubbed;                               // true if the vessel has co2 scrubbing capabilities
+  public bool   scrubbed;                               // true if the vessel has co2 scrubbing capabilities                                        
+  public double env_flux;                               // environnement (solar/body/albedo/background) flux (W)
+  public double crew_flux;                              // heat produced by kerbal bodies (W)
+  public double atmo_flux;                              // atmospheric convection/conduction flux (W)
   public double net_flux;                               // habitat net thermal flux (W)
   public double hab_temp;                               // habitat temperature degeneration factor
 

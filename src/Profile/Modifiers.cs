@@ -19,10 +19,6 @@ public static class Modifiers
           k *= vi.breathable ? 0.0 : 1.0;
           break;
 
-        case "temperature":
-          k *= Math.Abs(vi.temp_diff);
-          break;
-
         case "pos_flux":
           k *= vi.net_flux > 0.0 ? vi.net_flux : 0.0;
           break;
@@ -106,10 +102,6 @@ public static class Modifiers
       {
         case "breathable":
           k *= env.breathable ? 0.0 : 1.0;
-          break;
-
-        case "temperature":
-          k *= Math.Abs(env.temp_diff);
           break;
 
         case "pos_flux":

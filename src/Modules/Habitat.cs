@@ -348,30 +348,36 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     else return "cramped";
   }
 
-    // return net environnement related flux for the vessel habitat (Watt)
-    public static double atmo_flux(Vessel v, double surface, double temperature)
+  // return net atmospheric related heat flux for the vessel habitat (Watt)
+  public static double atmo_flux(CelestialBody mainBody, double altitude, double surface, double env_temperature, Vessel v = null)
+  {
+    // very approximate conductive/convective heat transfer when in atmo (W)
+    // Assumption : heat transfer coeficient at 100 kPa is 50 W/m²/K = 0.5 W/m²/K/kPA
+    if (mainBody.atmosphere && altitude < mainBody.atmosphereDepth)
     {
-      // very approximate conductive/convective heat transfer when in atmo (W)
-      // Assumption : heat transfer coeficient at 100 kPa is 50 W/m²/K = 0.5 W/m²/K/kPA
-      double atmo_flux = 0.0;
-      if (v.mainBody.atmosphere && v.altitude < v.mainBody.atmosphereDepth)
+      // when loaded, use the vessel root part skin temperature if there is a signifiant (> 50K) difference with our calculated environnement temperature
+      if (v != null && v.loaded && Math.Abs(v.rootPart.skinTemperature - env_temperature) > 50.0)
       {
-        if (v.loaded)
-        {
-          // TODO : USE settings.survivaltemp to clamp temp formula (see sim.tempdiff)
-          atmo_flux = surface * (Settings.SurvivalTemperature - v.rootPart.skinTemperature) * v.mainBody.GetPressure(v.altitude) * 0.5;
-        }
-        else
-        {
-          atmo_flux = surface * (Settings.SurvivalTemperature - temperature) * v.mainBody.GetPressure(v.altitude) * 0.5;
-        }
-
+        return surface * clamped_temp_diff(Settings.SurvivalTemperature, Settings.SurvivalRange, v.rootPart.skinTemperature) * mainBody.GetPressure(altitude) * 0.5;
       }
-      return atmo_flux;
+      else
+      {
+        return surface * clamped_temp_diff(Settings.SurvivalTemperature, Settings.SurvivalRange, env_temperature) * mainBody.GetPressure(altitude) * 0.5;
+      }
     }
+    return 0.0;
+  }
+
+  // return the temperature difference if the difference is greater than the survival range, else 0.0
+  public static double clamped_temp_diff(double survival_temp, double survival_range, double external_temp)
+  {
+    return (external_temp - survival_temp) > 0 ?
+      Math.Max(external_temp - survival_temp - survival_range, 0.0) :
+      Math.Min(external_temp - survival_temp + survival_range, 0.0);
+  }
 
 
-  // return net environnement related flux for the vessel habitat (Watt)
+  // return net environnement related heat flux for the vessel habitat (Watt)
   public static double env_flux(double surface, double temperature)
   {
     return
@@ -402,22 +408,25 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     );
   }
   
-  // return incoming flux due to crew bodies (Watt)
-  public static double kerbal_flux(Vessel v)
+  // return heat flux due to crew bodies (Watt)
+  public static double kerbal_flux(int crew_count)
   {
-  return Lib.CrewCount(v) * Settings.KerbalHeat; // kerbal bodies heat production
+    return crew_count * Settings.KerbalHeat; // kerbal bodies heat production
   }
 
   // return habitat temperature degeneration modifier
   public static double hab_temp(double volume, double net_flux)
   {
-    double modifier = (1 / Settings.SurvivalTime) * ((Settings.SurvivalTime / (Math.Abs((Settings.HabSpecificHeat * Settings.SurvivalRange * volume) / net_flux))) / 3);
+    // arcane formula to make relation between flux and survival time non linear
+    double modifier = (1.0 / Settings.SurvivalTime) * ((Settings.SurvivalTime / (Math.Abs((Settings.HabSpecificHeat * Settings.SurvivalRange * volume) / net_flux))) / 3.0);
+    // take care of zero/near zero net_flux case :
+    if (double.IsNaN(modifier) || double.IsInfinity(modifier)) return 0.0;
+    // no degeneration if heat flux is very small
     return modifier < 1.0e-6 ? 0.0 : modifier;
-
   }
 
-    // habitat state
-    public enum State
+  // habitat state
+  public enum State
   {
     disabled,   // hab is disabled
     enabled,    // hab is enabled
