@@ -348,6 +348,28 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     else return "cramped";
   }
 
+    // return net environnement related flux for the vessel habitat (Watt)
+    public static double atmo_flux(Vessel v, double surface, double temperature)
+    {
+      // very approximate conductive/convective heat transfer when in atmo (W)
+      // Assumption : heat transfer coeficient at 100 kPa is 50 W/m²/K = 0.5 W/m²/K/kPA
+      double atmo_flux = 0.0;
+      if (v.mainBody.atmosphere && v.altitude < v.mainBody.atmosphereDepth)
+      {
+        if (v.loaded)
+        {
+          // TODO : USE settings.survivaltemp to clamp temp formula (see sim.tempdiff)
+          atmo_flux = surface * (Settings.SurvivalTemperature - v.rootPart.skinTemperature) * v.mainBody.GetPressure(v.altitude) * 0.5;
+        }
+        else
+        {
+          atmo_flux = surface * (Settings.SurvivalTemperature - temperature) * v.mainBody.GetPressure(v.altitude) * 0.5;
+        }
+
+      }
+      return atmo_flux;
+    }
+
 
   // return net environnement related flux for the vessel habitat (Watt)
   public static double env_flux(double surface, double temperature)
@@ -355,7 +377,7 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     return
     // incoming flux :
     (
-      PhysicsGlobals.StefanBoltzmanConstant * Settings.VesselAbsorptivity * surface
+      PhysicsGlobals.StefanBoltzmanConstant * Settings.HabAbsorptivity * surface
       *
       (
         // solar + albedo + body + background flux for exposed surface
@@ -368,7 +390,7 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     -
     // outgoing (radiative) flux :
     (
-      PhysicsGlobals.StefanBoltzmanConstant * Settings.VesselEmissivity * surface
+      PhysicsGlobals.StefanBoltzmanConstant * Settings.HabEmissivity * surface
       *
       (
         // flux for exposed surface
@@ -383,11 +405,19 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
   // return incoming flux due to crew bodies (Watt)
   public static double kerbal_flux(Vessel v)
   {
-    return Lib.CrewCount(v) * Settings.KerbalHeat; // kerbal bodies heat production
+  return Lib.CrewCount(v) * Settings.KerbalHeat; // kerbal bodies heat production
   }
 
-  // habitat state
-  public enum State
+  // return habitat temperature degeneration modifier
+  public static double hab_temp(double volume, double net_flux)
+  {
+    double modifier = (1 / Settings.SurvivalTime) * ((Settings.SurvivalTime / (Math.Abs((Settings.HabSpecificHeat * Settings.SurvivalRange * volume) / net_flux))) / 3);
+    return modifier < 1.0e-6 ? 0.0 : modifier;
+
+  }
+
+    // habitat state
+    public enum State
   {
     disabled,   // hab is disabled
     enabled,    // hab is enabled

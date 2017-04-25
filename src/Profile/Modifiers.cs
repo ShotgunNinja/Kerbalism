@@ -31,6 +31,14 @@ public static class Modifiers
           k *= vi.net_flux < 0.0 ? Math.Abs(vi.net_flux) : 0.0;
           break;
 
+        case "pos_temp":
+          k *= vi.net_flux > 0.0 ? vi.hab_temp : 0.0;
+          break;
+
+        case "neg_temp":
+          k *= vi.net_flux < 0.0 ? vi.hab_temp : 0.0;
+          break;
+
         case "radiation":
           k *= vi.radiation;
           break;
@@ -110,6 +118,14 @@ public static class Modifiers
 
         case "neg_flux":
           k *= va.net_flux < 0.0 ? Math.Abs(va.net_flux) : 0.0;
+          break;
+
+        case "pos_temp":
+          k *= va.net_flux > 0.0 ? va.hab_temp : 0.0;
+          break;
+
+        case "neg_temp":
+          k *= va.net_flux < 0.0 ? va.hab_temp : 0.0;
           break;
 
         case "radiation":

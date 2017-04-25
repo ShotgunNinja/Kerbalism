@@ -736,6 +736,9 @@ public sealed class vessel_analyzer
 
     // calculate habitat net thermal flux (W)
     net_flux = Habitat.env_flux(surface, env.temperature) + (crew_count * Settings.KerbalHeat);
+
+    // habitat temperature degeneration factor
+    hab_temp = Habitat.hab_temp(volume, net_flux);             
   }
 
 
@@ -918,6 +921,7 @@ public sealed class vessel_analyzer
   public bool   pressurized;                            // true if the vessel has pressure control capabilities
   public bool   scrubbed;                               // true if the vessel has co2 scrubbing capabilities
   public double net_flux;                               // habitat net thermal flux (W)
+  public double hab_temp;                               // habitat temperature degeneration factor
 
   // radiation related
   public double emitted;                                // amount of radiation emitted by components

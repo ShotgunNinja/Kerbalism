@@ -32,9 +32,11 @@ public static class Settings
 
     // temperature
     SurvivalTemperature         = Lib.ConfigValue(cfg, "SurvivalTemperature",         295.0);
-    SurvivalRange               = Lib.ConfigValue(cfg, "SurvivalRange",               5.0);
-    VesselAbsorptivity          = Lib.ConfigValue(cfg, "VesselAbsorptivity",          0.15);
-    VesselEmissivity            = Lib.ConfigValue(cfg, "VesselEmissivity",            0.1);
+    SurvivalRange               = Lib.ConfigValue(cfg, "SurvivalRange",               25.0);
+    SurvivalTime                = Lib.ConfigValue(cfg, "SurvivalTime",                86400.0);
+    HabSpecificHeat             = Lib.ConfigValue(cfg, "HabSpecificHeat",             100000.0);
+    HabAbsorptivity             = Lib.ConfigValue(cfg, "HabAbsorptivity",             0.15);
+    HabEmissivity               = Lib.ConfigValue(cfg, "HabEmissivity",               0.1);
     ExposedSurfaceFactor        = Lib.ConfigValue(cfg, "ExposedSurfaceFactor",        0.25);
     KerbalHeat                  = Lib.ConfigValue(cfg, "KerbalHeat",                  30.0);
 
@@ -103,8 +105,10 @@ public static class Settings
   // temperature
   public static double SurvivalTemperature;               // ideal living temperature
   public static double SurvivalRange;                     // sweet spot around survival temperature
-  public static double VesselAbsorptivity;                // vessel absorptivity factor
-  public static double VesselEmissivity;                  // vessel emissivity factor
+  public static double SurvivalTime;                      // time of survival at SurvivalRange limit (s)
+  public static double HabSpecificHeat;                   // heat capacity of habitat (J/m^3/K)
+  public static double HabAbsorptivity;                   // habitat surface absorptivity factor
+  public static double HabEmissivity;                     // habitat surface emissivity factor
   public static double ExposedSurfaceFactor;              // % of habitat surface exposed to full flux intensity
   public static double KerbalHeat;                        // Kerbal body heat production (W)
 
