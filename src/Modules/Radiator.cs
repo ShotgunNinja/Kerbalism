@@ -367,12 +367,5 @@ namespace KERBALISM
     public string GetModuleTitle() { return "Coolant radiator"; }
     public string GetPrimaryField() { return string.Empty; }
     public Callback<Rect> GetDrawModulePanelCallback() { return null; }
-
-    // animation group support
-    public void EnableModule() { }
-    public void DisableModule() { }
-    public bool ModuleIsActive() { return running; }
-    public bool IsSituationValid() { return true; }
-
   }
 }
