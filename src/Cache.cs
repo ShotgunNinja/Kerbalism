@@ -98,7 +98,7 @@ public sealed class vessel_info
     poisoning = Habitat.poisoning(v);
     shielding = Habitat.shielding(v);
     living_space = Habitat.living_space(v);
-    net_flux = Habitat.env_flux(surface, temperature) + Habitat.kerbal_flux(Lib.CrewCount(v)) + Habitat.atmo_flux(v.mainBody, v.altitude, surface, temperature, v);
+    net_flux = Habitat.env_flux(surface, temperature) + Habitat.kerbal_flux(crew_count) + Habitat.atmo_flux(v.mainBody, v.altitude, surface, temperature, v);
     hab_temp = Habitat.hab_temp(volume, net_flux);
     comforts = new Comforts(v, landed, crew_count > 1, connection.linked);
 

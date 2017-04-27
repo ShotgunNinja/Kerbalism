@@ -352,17 +352,17 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
   public static double atmo_flux(CelestialBody mainBody, double altitude, double surface, double env_temperature, Vessel v = null)
   {
     // very approximate conductive/convective heat transfer when in atmo (W)
-    // Assumption : heat transfer coeficient at 100 kPa is 50 W/m²/K = 0.5 W/m²/K/kPA
+    // Assumption : heat transfer coeficient at 100 kPa is 10 W/m²/K = 0.1 W/m²/K/kPA
     if (mainBody.atmosphere && altitude < mainBody.atmosphereDepth)
     {
       // when loaded, use the vessel root part skin temperature if there is a signifiant (> 50K) difference with our calculated environnement temperature
       if (v != null && v.loaded && Math.Abs(v.rootPart.skinTemperature - env_temperature) > 50.0)
       {
-        return surface * clamped_temp_diff(Settings.SurvivalTemperature, Settings.SurvivalRange, v.rootPart.skinTemperature) * mainBody.GetPressure(altitude) * 0.5;
+        return surface * clamped_temp_diff(Settings.SurvivalTemperature, Settings.SurvivalRange, v.rootPart.skinTemperature) * mainBody.GetPressure(altitude) * 0.1;
       }
       else
       {
-        return surface * clamped_temp_diff(Settings.SurvivalTemperature, Settings.SurvivalRange, env_temperature) * mainBody.GetPressure(altitude) * 0.5;
+        return surface * clamped_temp_diff(Settings.SurvivalTemperature, Settings.SurvivalRange, env_temperature) * mainBody.GetPressure(altitude) * 0.1;
       }
     }
     return 0.0;
@@ -371,7 +371,7 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
   // return the temperature difference if the difference is greater than the survival range, else 0.0
   public static double clamped_temp_diff(double survival_temp, double survival_range, double external_temp)
   {
-    return (external_temp - survival_temp) > 0 ?
+    return (external_temp - survival_temp) > 0.0 ?
       Math.Max(external_temp - survival_temp - survival_range, 0.0) :
       Math.Min(external_temp - survival_temp + survival_range, 0.0);
   }
@@ -387,10 +387,10 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
       *
       (
         // solar + albedo + body + background flux for exposed surface
-        (Math.Pow(temperature, 4) * Settings.ExposedSurfaceFactor) 
+        (Math.Pow(temperature, 4.0) * Settings.ExposedSurfaceFactor) 
         +
         // background flux for non-exposed surface
-        (Math.Pow(Sim.BlackBodyTemperature(Sim.BackgroundFlux()), 4) * (1 - Settings.ExposedSurfaceFactor))
+        (Math.Pow(Sim.BlackBodyTemperature(Sim.BackgroundFlux()), 4.0) * (1.0 - Settings.ExposedSurfaceFactor))
       )
     )
     -
@@ -400,10 +400,10 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
       *
       (
         // flux for exposed surface
-        (Math.Pow(Math.Max(temperature, Settings.SurvivalTemperature), 4) * Settings.ExposedSurfaceFactor) 
+        (Math.Pow(Math.Max(temperature, Settings.SurvivalTemperature), 4.0) * Settings.ExposedSurfaceFactor) 
         +
         // flux for non-exposed surface
-        (Math.Pow(Settings.SurvivalTemperature, 4) * (1 - Settings.ExposedSurfaceFactor))
+        (Math.Pow(Settings.SurvivalTemperature, 4.0) * (1.0 - Settings.ExposedSurfaceFactor))
       )
     );
   }

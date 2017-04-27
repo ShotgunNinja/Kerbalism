@@ -60,7 +60,7 @@ public static class Modifiers
           break;
 
         case "mod_comfort_space_limiter":
-          k *= vi.comforts.factor * ((1 - vi.comforts.factor) + (vi.living_space));
+          k *= vi.comforts.factor * (1.0 - vi.comforts.factor + vi.living_space);
           break;
 
         case "pressure":
@@ -80,8 +80,7 @@ public static class Modifiers
           break;
 
         case "inverse":
-          double i = 1.0 / k;
-          k = double.IsInfinity(i) || double.IsNaN(i) ? 0.0 : i;
+          k = k > double.Epsilon ? 1.0 / k : 0.0;
           break;
 
         default:
@@ -145,7 +144,7 @@ public static class Modifiers
           break;
 
         case "mod_comfort_space_limiter":
-          k *= va.comforts.factor * ((1 - va.comforts.factor) + (va.living_space));
+          k *= va.comforts.factor * (1.0 - va.comforts.factor + va.living_space);
           break;
 
         case "pressure":
@@ -165,8 +164,7 @@ public static class Modifiers
           break;
 
         case "inverse":
-          double i = 1.0 / k;
-          k = double.IsInfinity(i) || double.IsNaN(i) ? 0.0 : i;
+          k = k > double.Epsilon ? 1.0 / k : 0.0;
           break;
 
         default:
