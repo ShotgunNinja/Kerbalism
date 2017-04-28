@@ -19,6 +19,7 @@ public static class Background
     Emitter,
     Harvester,
     Laboratory,
+    Radiator,
     Command,
     Panel,
     Generator,
@@ -46,6 +47,7 @@ public static class Background
       case "Emitter":                      return module_type.Emitter;
       case "Harvester":                    return module_type.Harvester;
       case "Laboratory":                   return module_type.Laboratory;
+      case "Radiator":                     return module_type.Radiator;
       case "ModuleCommand":                return module_type.Command;
       case "ModuleDeployableSolarPanel":   return module_type.Panel;
       case "ModuleGenerator":              return module_type.Generator;
@@ -116,6 +118,7 @@ public static class Background
           case module_type.Emitter:               Emitter.BackgroundUpdate(v, p, m, module_prefab as Emitter, ec, elapsed_s);                 break;
           case module_type.Harvester:             Harvester.BackgroundUpdate(v, m, module_prefab as Harvester, elapsed_s);                    break;
           case module_type.Laboratory:            Laboratory.BackgroundUpdate(v, p, m, module_prefab as Laboratory, ec, elapsed_s);           break;
+          case module_type.Radiator:              Radiator.BackgroundUpdate(v, p, m, module_prefab as Radiator, vi, resources, elapsed_s);    break;
           case module_type.Command:               ProcessCommand(v, p, m, module_prefab as ModuleCommand, resources, elapsed_s);              break;
           case module_type.Panel:                 ProcessPanel(v, p, m, module_prefab as ModuleDeployableSolarPanel, vi, ec, elapsed_s);      break;
           case module_type.Generator:             ProcessGenerator(v, p, m, module_prefab as ModuleGenerator, resources, elapsed_s);          break;

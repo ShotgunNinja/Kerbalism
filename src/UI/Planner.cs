@@ -56,8 +56,8 @@ public sealed class Planner
     // special panels
     // - stress & radiation panels require that a rule using the living_space/radiation modifier exist (current limitation)
     panel_special = new List<string>();
-    if (Features.LivingSpace && Profile.rules.Find(k => k.modifiers.Contains("living_space")) != null) panel_special.Add("qol");
-    if (Features.Radiation && Profile.rules.Find(k => k.modifiers.Contains("radiation")) != null) panel_special.Add("radiation");
+    if (Features.LivingSpace && Profile.rules.Find(k => k.modifiers.Contains("living_space") || k.modifiers_degen.Contains("living_space")) != null) panel_special.Add("qol");
+    if (Features.Radiation && Profile.rules.Find(k => k.modifiers.Contains("radiation") || k.modifiers_degen.Contains("radiation")) != null) panel_special.Add("radiation");
     if (Features.Reliability) panel_special.Add("reliability");
     if (Features.Signal) panel_special.Add("signal");
 
@@ -256,46 +256,73 @@ public sealed class Planner
     // get first living space rule
     // - guaranteed to exist, as this panel is not rendered if it doesn't
     // - even without crew, it is safe to evaluate the modifiers that use it
-    Rule rule = Profile.rules.Find(k => k.modifiers.Contains("living_space"));
+    Rule rule = Profile.rules.Find(k => k.modifiers.Contains("living_space") || k.modifiers_degen.Contains("living_space"));
 
     // render title
     p.section("STRESS", string.Empty, () => p.prev(ref special_index, panel_special.Count), () => p.next(ref special_index, panel_special.Count));
 
+    bool use_comfort = rule.modifiers.Contains("comfort") || rule.modifiers_degen.Contains("comfort");
+    bool use_pressure = rule.modifiers.Contains("pressure") || rule.modifiers_degen.Contains("pressure");
+
     // render living space data
     // generate details tooltips
-    string living_space_tooltip = Lib.BuildString
-    (
-      "volume per-capita: <b>", Lib.HumanReadableVolume(va.volume / (double)Math.Max(va.crew_count, 1)), "</b>\n",
-      "ideal living space: <b>", Lib.HumanReadableVolume(Settings.IdealLivingSpace), "</b>"
-    );
+    string volume_per_capita = Lib.HumanReadableVolume(va.volume / (double)Math.Max(va.crew_count, 1));
+    string ideal_living_space = Lib.HumanReadableVolume(Settings.IdealLivingSpace);
+    string living_space_tooltip = string.Empty;
+    if (use_comfort && use_pressure)
+    {
+      living_space_tooltip = Lib.BuildString
+      (
+        "volume per-capita: <b>", volume_per_capita, "</b>\n",
+        "ideal living space: <b>", ideal_living_space, "</b>"
+      );
+    }
+    else if (use_comfort || use_pressure)
+    {
+      living_space_tooltip = Lib.BuildString
+      (
+        "ideal living space: <b>", ideal_living_space, "</b>"
+      );
+    }
     p.content("living space", Habitat.living_space_to_string(va.living_space), living_space_tooltip);
 
     // render comfort data
-    if (rule.modifiers.Contains("comfort"))
+    if (use_comfort)
     {
       p.content("comfort", va.comforts.summary(), va.comforts.tooltip());
     }
-    else
-    {
-      p.content("comfort", "n/a");
-    }
 
     // render pressure data
-    if (rule.modifiers.Contains("pressure"))
+    if (use_pressure)
     {
       string pressure_tooltip = va.pressurized
         ? "Free roaming in a pressurized environment is\nvastly superior to living in a suit."
         : "Being forced inside a suit all the time greatly\nreduce the crew quality of life.\nThe worst part is the diaper.";
       p.content("pressurized", va.pressurized ? "yes" : "no", pressure_tooltip);
     }
-    else
+
+    // if pressure/comfort are absent, use the empty space to render volume per-capita & ideal living space
+    if (!use_comfort && !use_pressure)
     {
-      p.content("pressurized", "n/a");
+      p.content("volume per-capita", volume_per_capita);
+      p.content("ideal living space", ideal_living_space);
+    }
+    else if (!use_comfort || !use_pressure)
+    {
+      p.content("volume per-capita", volume_per_capita, living_space_tooltip);
     }
 
     // render life estimate
-    double mod = Modifiers.evaluate(env, va, sim, rule.modifiers);
-    p.content("duration", Lib.HumanReadableDuration(rule.fatal_threshold / (rule.degeneration * mod)));
+    double mod = rule.modifiers_degen.Count > 0 ? Modifiers.evaluate(env, va, sim, rule.modifiers_degen) : Modifiers.evaluate(env, va, sim, rule.modifiers);
+    if (rule.input != string.Empty)
+    {
+      simulated_resource res = sim.resource(rule.input);
+      p.content("time to breakdown", Lib.HumanReadableDuration((rule.fatal_threshold / (rule.degeneration * mod)) + res.lifetime()));
+    }
+    else
+    {
+      p.content("time to breakdown", Lib.HumanReadableDuration(rule.fatal_threshold / (rule.degeneration * mod)));
+    }
   }
 
 
@@ -648,7 +675,7 @@ public sealed class vessel_analyzer
     // inverting their order avoided this corner-case
 
     analyze_crew(parts);
-    analyze_habitat(sim);
+    analyze_habitat(sim, env);
     analyze_radiation(parts, sim);
     analyze_reliability(parts);
     analyze_signal(parts, env);
@@ -693,7 +720,7 @@ public sealed class vessel_analyzer
   }
 
 
-  void analyze_habitat(resource_simulator sim)
+  void analyze_habitat(resource_simulator sim, environment_analyzer env)
   {
     // calculate total volume
     volume = sim.resource("Atmosphere").capacity;
@@ -706,6 +733,21 @@ public sealed class vessel_analyzer
 
     // determine if the vessel has scrubbing capabilities
     scrubbed = sim.resource("WasteAtmosphere").consumed > 0.0;
+
+      // calculate environnement (solar/body/albedo/background) flux (W)
+      env_flux = Habitat.env_flux(surface, env.temperature);
+
+      // calculate heat produced by kerbal bodies (W)
+      crew_flux = Habitat.kerbal_flux((int) crew_count);
+
+      // calculate atmospheric convection/conduction flux (W)
+      atmo_flux = Habitat.atmo_flux(env.body, env.altitude, surface, env.temperature);
+
+    // calculate habitat net thermal flux (W)
+      net_flux = env_flux + crew_flux + atmo_flux;
+
+    // habitat temperature degeneration factor
+    hab_temp = Habitat.hab_temp(volume, net_flux);             
   }
 
 
@@ -886,7 +928,12 @@ public sealed class vessel_analyzer
   public double volume;                                 // total volume in m^3
   public double surface;                                // total surface in m^2
   public bool   pressurized;                            // true if the vessel has pressure control capabilities
-  public bool   scrubbed;                               // true if the vessel has co2 scrubbing capabilities
+  public bool   scrubbed;                               // true if the vessel has co2 scrubbing capabilities                                        
+  public double env_flux;                               // environnement (solar/body/albedo/background) flux (W)
+  public double crew_flux;                              // heat produced by kerbal bodies (W)
+  public double atmo_flux;                              // atmospheric convection/conduction flux (W)
+  public double net_flux;                               // habitat net thermal flux (W)
+  public double hab_temp;                               // habitat temperature degeneration factor
 
   // radiation related
   public double emitted;                                // amount of radiation emitted by components
@@ -966,6 +1013,7 @@ public class resource_simulator
 
         switch(m.moduleName)
         {
+          case "Radiator":                     process_radiator(m as Radiator, env);                    break;
           case "Greenhouse":                   process_greenhouse(m as Greenhouse, env, va);            break;
           case "GravityRing":                  process_ring(m as GravityRing);                          break;
           case "Emitter":                      process_emitter(m as Emitter);                           break;
@@ -1079,6 +1127,46 @@ public class resource_simulator
     }
     recipes.Add(recipe);
   }
+
+  void process_radiator(Radiator r, environment_analyzer env)
+    {
+      // assume the sun and mainbody are at a 45° angle in the editor
+      Vector3d sun_dir = new Vector3d(0.7, 0.7, 0.0);
+      Vector3d body_dir = new Vector3d(0.7, -0.7, 0.0);
+
+      if (!r.running) { return; }
+      // calculate net flux (W)
+      r.cooling_rate = Radiator.GetRadiatorFlux
+      (
+        body_dir, // body_dir
+        sun_dir, // sun_dir 
+        r.GetFacingDirectionLoaded(sun_dir), // radiator_dir
+        env.body_flux, // body_flux
+        env.albedo_flux, // albedo_flux
+        env.solar_flux, // solar_flux
+        env.temperature, // env_temperature
+        env.body.GetPressure(Math.Max(env.altitude, 0.0)), // env_pressure
+        r.surface,
+        r.radiator_type,
+        r.emissivity,
+        r.coolant_temperature);
+
+      // calculate input rate
+      r.input_rate = Radiator.GetInputRate(
+        r.cooling_rate,
+        r.coolant_temperature,
+        r.temperature_min,
+        r.temperature_max,
+        r.input_rate_min,
+        r.input_rate_max);
+
+      simulated_recipe recipe = new simulated_recipe("coolant radiators");
+      // consume input at fixed rate
+      recipe.input(r.input_resource, r.input_rate);
+      // produce coolant (1 unit/s = 1kW)
+      recipe.output(r.output_resource, r.cooling_rate, false);
+      recipes.Add(recipe);
+    }
 
 
   void process_greenhouse(Greenhouse g, environment_analyzer env, vessel_analyzer va)
