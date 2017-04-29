@@ -16,6 +16,12 @@ public static class UI
     window   = new Window(260u, 280u, 100u);
   }
 
+  public static void load()
+  {
+    window.load();
+    first_time_mapview = DB.UIdata.mapviewed;
+  }
+
   public static void update(bool show_window)
   {
     // if gui should be shown
@@ -27,6 +33,7 @@ public static class UI
       {
         open(BodyInfo.body_info);
         first_time_mapview = true;
+        DB.UIdata.mapviewed = first_time_mapview;
       }
 
       // update subsystems
