@@ -1,7 +1,26 @@
-// WARNING: WORK IN PROGRESS
+// rename from 'Experiments.disabled' to 'Experiments.cfg' to enable, viceversa to disable
 
 // ============================================================================
-// Replace experiment module in stock parts
+// Experiments are executed over time, in custom situations.
+// This is disabled by default for the following reasons:
+// - the underlying infrastructure is still experimental
+// - the RnD Archives user interface doesn't show the custom situation filters (yet)
+// - need to rebalance the whole early game
+//
+// SUPPORTED SITUATIONS:
+// Surface:           landed or splashed
+// Atmosphere:        inside an atmosphere
+// Ocean:             inside an ocean
+// Space:             in space, not around the sun
+// InterPlanetary:    in space, around the sun, inside the heliosphere
+// InterStellar:      in space, around the sun, outside the heliosphere
+// AbsoluteZero:      temperature is below 30 Kelvin
+// InnerBelt:         inside an inner belt
+// OuterBelt:         inside an outer belt
+// Magnetosphere:     inside the magnetosphere
+// Thermosphere:      in space, body has atmosphere, altitude below atmo_depth * 5
+// Exosphere:         in space, body has atmosphere, altitude between atmo_depth * 5 and atmo_depth * 25
+// * situations are mutually exclusive, the first valid one in list has priority over the others
 // ============================================================================
 
 @PART[kerbalism-geigercounter]:NEEDS[FeatureScience]:FOR[Kerbalism]

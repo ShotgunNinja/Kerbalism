@@ -67,8 +67,8 @@ public sealed class Rule
       // get kerbal data
       KerbalData kd = DB.Kerbal(c.name);
 
-      // skip resque kerbals
-      if (kd.resque) continue;
+      // skip rescue kerbals
+      if (kd.rescue) continue;
 
       // skip disabled kerbals
       if (kd.disabled) continue;
@@ -121,10 +121,10 @@ public sealed class Rule
           else
           {
             // transform input into output resource
-            // note: rules always dump excess overboard (because it is waste)
-            resource_recipe recipe = new resource_recipe(true);
+            // - rules always dump excess overboard (because it is waste)
+            resource_recipe recipe = new resource_recipe();
             recipe.Input(input, required);
-            recipe.Output(output, required * ratio);
+            recipe.Output(output, required * ratio, true);
             resources.Transform(recipe);
           }
         }
@@ -233,6 +233,5 @@ public sealed class Rule
 
 
 } // KERBALISM
-
 
 

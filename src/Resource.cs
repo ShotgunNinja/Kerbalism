@@ -18,26 +18,26 @@ public sealed class resource_info
     {
       foreach(Part p in v.Parts)
       {
-        foreach(PartResource res in p.Resources)
+        foreach(PartResource r in p.Resources)
         {
-          if (res.flowState && res.resourceName == resource_name)
+          if (r.flowState && r.resourceName == resource_name)
           {
-            amount += res.amount;
-            capacity += res.maxAmount;
+            amount += r.amount;
+            capacity += r.maxAmount;
           }
         }
       }
     }
     else
     {
-      foreach(ProtoPartSnapshot pps in v.protoVessel.protoPartSnapshots)
+      foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
       {
-        foreach(ProtoPartResourceSnapshot pprs in pps.resources)
+        foreach(ProtoPartResourceSnapshot r in p.resources)
         {
-          if (pprs.resourceName == resource_name && pprs.flowState)
+          if (r.flowState && r.resourceName == resource_name)
           {
-            amount += pprs.amount;
-            capacity += pprs.maxAmount;
+            amount += r.amount;
+            capacity += r.maxAmount;
           }
         }
       }
@@ -59,80 +59,163 @@ public sealed class resource_info
     deferred -= quantity;
   }
 
+
   // synchronize amount from cache to vessel
   public void Sync(Vessel v, double elapsed_s)
   {
-    // for loaded vessels
+    // # OVERVIEW
+    // - deferred consumption/production is accumulated, then this function called
+    // - detect amount/capacity in vessel
+    // - clamp deferred to amount/capacity
+    // - apply deferred
+    // - update cached amount [disabled, see comments]
+    // - calculate change rate per-second
+    // - calculate resource level
+    // - reset deferred
+
+    // # NOTE
+    // It is impossible to guarantee coherency in resource simulation of loaded vessels,
+    // if consumers/producers external to the resource cache exist in the vessel (#96).
+    // Such is the case for example on loaded vessels with stock solar panels.
+    // The effect is that the whole resource simulation become dependent on timestep again.
+    // From the user point-of-view, there are two cases:
+    // - (A) the timestep-dependent error is smaller than capacity
+    // - (B) the timestep-dependent error is bigger than capacity
+    // In case [A], there are no consequences except a slightly wrong computed level and rate.
+    // In case [B], the simulation became incoherent and from that point anything can happen,
+    // like for example insta-death by co2 poisoning or climatization.
+    // To avoid the consequences of [B]:
+    // - we hacked the stock solar panel to use the resource cache
+    // - we detect incoherency on loaded vessels, and forbid the two highest warp speeds
+
+
+    // remember amount currently known, to calculate rate later on
+    double old_amount = amount;
+
+    // remember capacity currently known, to detect flow state changes
+    double old_capacity = capacity;
+
+    // iterate over all enabled resource containers and detect amount/capacity again
+    // - this detect production/consumption from stock and third-party mods
+    //   that by-pass the resource cache, and flow state changes in general
+    amount = 0.0;
+    capacity = 0.0;
     if (v.loaded)
     {
-      // for each part resource
-      double new_amount = 0.0;
-      capacity = 0.0;
       foreach(Part p in v.Parts)
       {
         foreach(PartResource r in p.Resources)
         {
           if (r.flowState && r.resourceName == resource_name)
           {
-            // get amount/capacity
-            new_amount += r.amount;
+            amount += r.amount;
             capacity += r.maxAmount;
-
-            // stock RequestResource() is iterating on all parts and all resources probably,
-            // so we do both amount/capacity detection and resource synchronization at the same time
-            // this also give coherency among flow rules between loaded and unloaded vessels
-            if (Math.Abs(deferred) > 0.0000001)
-            {
-              double amount_diff = Lib.Clamp(r.amount + deferred, 0.0, r.maxAmount) - r.amount;
-              r.amount += amount_diff;
-              deferred -= amount_diff;
-            }
-            if (r.amount < 0.0000001) r.amount = 0.0;
           }
         }
       }
-
-      // calculate rate of change per-second
-      // note: do not update rate during and immediately after warp blending (stock modules have instabilities during warp blending)
-      // note: rate is not updated during the simulation steps where meal is consumed, to avoid counting it twice
-      if (Kerbalism.warp_blending > 50 && !meal_happened) rate = (new_amount - amount) / elapsed_s;
-
-      // update amount
-      amount = new_amount;
     }
-    // for unloaded vessels
     else
     {
-      // apply all deferred requests
-      amount = Lib.Clamp(amount + deferred , 0.0, capacity);
-
-      // calculate rate of change per-second
-      // note: rate is not updated during the simulation steps where meal is consumed, to avoid counting it twice
-      if (!meal_happened) rate = Lib.Clamp(deferred, -amount, capacity - amount) / elapsed_s;
-
-      // syncronize the amount to the vessel
-      foreach(ProtoPartSnapshot pps in v.protoVessel.protoPartSnapshots)
+      foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
       {
-        foreach(ProtoPartResourceSnapshot res in pps.resources)
+        foreach(ProtoPartResourceSnapshot r in p.resources)
         {
-          if (res.resourceName == resource_name && res.flowState)
+          if (r.flowState && r.resourceName == resource_name)
           {
-            double new_amount = Lib.Clamp(res.amount + deferred, 0.0, res.maxAmount);
-            deferred -= new_amount - res.amount;
-            res.amount = new_amount;
-            if (Math.Abs(deferred) < 0.0000001) break;
+            amount += r.amount;
+            capacity += r.maxAmount;
           }
         }
       }
     }
+
+    // if incoherent producers are detected, do not allow high timewarp speed
+    // - ignore incoherent consumers (no negative consequences for player)
+    // - ignore flow state changes (avoid issue with process controllers)
+    // - unloaded vessels can't be incoherent, we are in full control there
+    // - can be disabled in settings
+    if (Settings.EnforceCoherency && v.loaded && TimeWarp.CurrentRateIndex >= 6 && amount - old_amount > 1e-10 && capacity - old_capacity < 1e-10)
+    {
+      Message.Post
+      (
+        Severity.warning,
+        Lib.BuildString
+        (
+          !v.isActiveVessel ? Lib.BuildString("On <b>", v.vesselName, "</b>\na ") : "A ",
+          "producer of <b>", resource_name, "</b> has\n",
+          "incoherent behaviour at high warp speed.\n",
+          "<i>Unload the vessel before warping</i>"
+        )
+      );
+      Lib.StopWarp(5);
+    }
+
+
+    // clamp consumption/production to vessel amount/capacity
+    // - if deferred is negative, then amount is guaranteed to be greater than zero
+    // - if deferred is positive, then capacity - amount is guaranteed to be greater than zero
+    deferred = Lib.Clamp(deferred, -amount, capacity - amount);
+
+    // apply deferred consumption/production, simulating ALL_VESSEL_BALANCED
+    // - iterating again is faster than using a temporary list of valid PartResources
+    // - avoid very small values in deferred consumption/production
+    if(Math.Abs(deferred) > 1e-10)
+    {
+      if (v.loaded)
+      {
+        foreach(Part p in v.parts)
+        {
+          foreach(PartResource r in p.Resources)
+          {
+            if (r.flowState && r.resourceName == resource_name)
+            {
+              // calculate consumption/production coefficient for the part
+              double k = deferred < 0.0
+                ? r.amount / amount
+                : (r.maxAmount - r.amount) / (capacity - amount);
+
+              // apply deferred consumption/production
+              r.amount += deferred * k;
+            }
+          }
+        }
+      }
+      else
+      {
+        foreach(ProtoPartSnapshot p in v.protoVessel.protoPartSnapshots)
+        {
+          foreach(ProtoPartResourceSnapshot r in p.resources)
+          {
+            if (r.flowState && r.resourceName == resource_name)
+            {
+              // calculate consumption/production coefficient for the part
+              double k = deferred < 0.0
+                ? r.amount / amount
+                : (r.maxAmount - r.amount) / (capacity - amount);
+
+              // apply deferred consumption/production
+              r.amount += deferred * k;
+            }
+          }
+        }
+      }
+    }
+
+    // update amount, to get correct rate and levels at all times
+    amount += deferred;
+
+    // calculate rate of change per-second
+    // - don't update rate during and immediately after warp blending (stock modules have instabilities during warp blending)
+    // - don't update rate during the simulation steps where meal is consumed, to avoid counting it twice
+    if ((!v.loaded || Kerbalism.warp_blending > 50) && !meal_happened) rate = (amount - old_amount) / elapsed_s;
 
     // recalculate level
     level = capacity > double.Epsilon ? amount / capacity : 0.0;
 
-    // reset deferred consumption/production
+    // reset deferred production/consumption
     deferred = 0.0;
 
-    // reseal meal flag
+    // reset meal flag
     meal_happened = false;
   }
 
@@ -159,7 +242,7 @@ public sealed class resource_info
     double delta = rate + meal_rate;
 
     // return depletion
-    return amount <= double.Epsilon ? 0.0 : delta >= -0.0000001 ? double.NaN : amount / -delta;
+    return amount <= double.Epsilon ? 0.0 : delta >= -1e-10 ? double.NaN : amount / -delta;
   }
 
 
@@ -177,22 +260,23 @@ public sealed class resource_recipe
 {
   public struct entry
   {
-    public entry(string name, double quantity)
+    public entry(string name, double quantity, bool dump=true)
     {
       this.name = name;
       this.quantity = quantity;
       this.inv_quantity = 1.0 / quantity;
+      this.dump = dump;
     }
     public string name;
     public double quantity;
     public double inv_quantity;
+    public bool   dump;
   }
 
-  public resource_recipe(bool dump = false)
+  public resource_recipe()
   {
     this.inputs = new List<entry>();
     this.outputs = new List<entry>();
-    this.dump = dump;
     this.left = 1.0;
   }
 
@@ -206,11 +290,11 @@ public sealed class resource_recipe
   }
 
   // add an output to the recipe
-  public void Output(string resource_name, double quantity)
+  public void Output(string resource_name, double quantity, bool dump)
   {
     if (quantity > double.Epsilon) //< avoid division by zero
     {
-      outputs.Add(new entry(resource_name, quantity));
+      outputs.Add(new entry(resource_name, quantity, dump));
     }
   }
 
@@ -218,7 +302,7 @@ public sealed class resource_recipe
   public bool Execute(Vessel v, vessel_resources resources)
   {
     // determine worst input ratio
-    // note: pure input recipes can just underflow
+    // - pure input recipes can just underflow
     double worst_input = left;
     if (outputs.Count > 0)
     {
@@ -231,16 +315,18 @@ public sealed class resource_recipe
     }
 
     // determine worst output ratio
-    // note: pure output recipes can just overflow
-    // note: recipes that dump overboard can just overflow
+    // - pure output recipes can just overflow
     double worst_output = left;
-    if (inputs.Count > 0 && !dump)
+    if (inputs.Count > 0)
     {
       for(int i=0; i<outputs.Count; ++i)
       {
         entry e = outputs[i];
-        resource_info res = resources.Info(v, e.name);
-        worst_output = Lib.Clamp((res.capacity - (res.amount + res.deferred)) * e.inv_quantity, 0.0, worst_output);
+        if (!e.dump) // ignore outputs that can dump overboard
+        {
+          resource_info res = resources.Info(v, e.name);
+          worst_output = Lib.Clamp((res.capacity - (res.amount + res.deferred)) * e.inv_quantity, 0.0, worst_output);
+        }
       }
     }
 
@@ -271,10 +357,8 @@ public sealed class resource_recipe
 
   public List<entry>  inputs;   // set of input resources
   public List<entry>  outputs;  // set of output resources
-  public bool         dump;     // dump excess output if true
   public double       left;     // what proportion of the recipe is left to execute
 }
-
 
 
 // the resource cache of a vessel
@@ -410,7 +494,6 @@ public static class ResourceCache
   {
     Get(v).Transform(recipe);
   }
-
 
   // resource cache
   static Dictionary<Guid, vessel_resources> entries;

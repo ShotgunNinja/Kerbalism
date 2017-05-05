@@ -21,9 +21,11 @@ public static class Lib
   }
 
   // return version as a string
+  static string _version;
   public static string Version()
   {
-    return Assembly.GetExecutingAssembly().GetName().Version.ToString();
+    if (_version == null) _version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+    return _version;
   }
 
   // return true if an assembly with specified name is loaded
@@ -102,7 +104,8 @@ public static class Lib
   }
 
   // return random float in [-1,+1] range
-  // note: it is less random than the c# RNG, but is way faster
+  // - it is less random than the c# RNG, but is way faster
+  // - the seed is meant to overflow! (turn off arithmetic overflow/underflow exceptions)
   static int fast_float_seed = 1;
   public static float FastRandomFloat()
   {
@@ -170,15 +173,10 @@ public static class Lib
   }
 
   // stop time warping
-  public static void StopWarp()
+  public static void StopWarp(int rate=0)
   {
-    // [experimental]
-    // it seem there is no more 'orbit messing' from instantaneously stopping timewarp
     TimeWarp.fetch.CancelAutoWarp();
-    TimeWarp.SetRate(0, true, false);
-    // the old way
-    //if (TimeWarp.CurrentRateIndex > 4) TimeWarp.SetRate(4, true);
-    //if (TimeWarp.CurrentRateIndex > 0) TimeWarp.SetRate(0, false);
+    TimeWarp.SetRate(rate, true, false);
   }
 
   // disable time warping above a specified level
@@ -549,7 +547,7 @@ public static class Lib
   // pretty-print pressure (value is in kPa)
   public static string HumanReadablePressure(double v)
   {
-    return Lib.BuildString(v.ToString("F0"), " kPa");
+    return Lib.BuildString(v.ToString("F1"), " kPa");
   }
 
   // pretty-print volume (value is in m^3)
@@ -765,8 +763,9 @@ public static class Lib
     if (v.state == Vessel.State.DEAD) return false;
 
     // if the vessel is a debris, a flag or an asteroid, ignore it
-    // note: the user can change vessel type, in that case he is actually disabling this mod for the vessel
-    // the alternative is to scan the vessel for ModuleCommand, but that is slower, and resque vessels have no module command
+    // - the user can change vessel type, in that case he is actually disabling this mod for the vessel
+    //   the alternative is to scan the vessel for ModuleCommand, but that is slower, and rescue vessels have no module command
+    // - flags have type set to 'station' for a single update, can still be detected as they have vesselID == 0
     if (v.vesselType == VesselType.Debris || v.vesselType == VesselType.Flag || v.vesselType == VesselType.SpaceObject || v.vesselType == VesselType.Unknown) return false;
 
     // [disabled] when going to eva (and possibly other occasions), for a single update the vessel is not properly set
@@ -1173,52 +1172,85 @@ public static class Lib
   // return true if there is experiment data on the vessel
   public static bool HasData(Vessel v)
   {
-    // if vessel is loaded
-    if (v.loaded)
+    // stock science system
+    if (!Features.Science)
     {
-      // iterate over all science containers/experiments and return true if there is data
-      return Lib.HasModule<IScienceDataContainer>(v, k => k.GetData().Length > 0);
+      // if vessel is loaded
+      if (v.loaded)
+      {
+        // iterate over all science containers/experiments and return true if there is data
+        return Lib.HasModule<IScienceDataContainer>(v, k => k.GetData().Length > 0);
+      }
+      // if not loaded
+      else
+      {
+        // iterate over all science containers/experiments proto modules and return true if there is data
+        return Lib.HasModule(v.protoVessel, "ModuleScienceContainer", k => k.moduleValues.GetNodes("ScienceData").Length > 0)
+            || Lib.HasModule(v.protoVessel, "ModuleScienceExperiment", k => k.moduleValues.GetNodes("ScienceData").Length > 0);
+      }
     }
-    // if not loaded
+    // our own science system
     else
     {
-      // iterate over all science containers/experiments proto modules and return true if there is data
-      return Lib.HasModule(v.protoVessel, "ModuleScienceContainer", k => k.moduleValues.GetNodes("ScienceData").Length > 0)
-          || Lib.HasModule(v.protoVessel, "ModuleScienceExperiment", k => k.moduleValues.GetNodes("ScienceData").Length > 0);
+      return DB.Vessel(v).drive.files.Count > 0;
     }
   }
 
   // remove one experiment at random from the vessel
   public static void RemoveData(Vessel v)
   {
-    // if vessel is loaded
-    if (v.loaded)
+    // stock science system
+    if (!Features.Science)
     {
-      // get all science containers/experiments with data
-      List<IScienceDataContainer> modules = Lib.FindModules<IScienceDataContainer>(v).FindAll(k => k.GetData().Length > 0);
-
-      // remove a data sample at random
-      if (modules.Count > 0)
+      // if vessel is loaded
+      if (v.loaded)
       {
-        IScienceDataContainer container = modules[Lib.RandomInt(modules.Count)];
-        ScienceData[] data = container.GetData();
-        container.DumpData(data[Lib.RandomInt(data.Length)]);
+        // get all science containers/experiments with data
+        List<IScienceDataContainer> modules = Lib.FindModules<IScienceDataContainer>(v).FindAll(k => k.GetData().Length > 0);
+
+        // remove a data sample at random
+        if (modules.Count > 0)
+        {
+          IScienceDataContainer container = modules[Lib.RandomInt(modules.Count)];
+          ScienceData[] data = container.GetData();
+          container.DumpData(data[Lib.RandomInt(data.Length)]);
+        }
+      }
+      // if not loaded
+      else
+      {
+        // get all science containers/experiments with data
+        var modules = new List<ProtoPartModuleSnapshot>();
+        modules.AddRange(Lib.FindModules(v.protoVessel, "ModuleScienceContainer").FindAll(k => k.moduleValues.GetNodes("ScienceData").Length > 0));
+        modules.AddRange(Lib.FindModules(v.protoVessel, "ModuleScienceExperiment").FindAll(k => k.moduleValues.GetNodes("ScienceData").Length > 0));
+
+        // remove a data sample at random
+        if (modules.Count > 0)
+        {
+          ProtoPartModuleSnapshot container = modules[Lib.RandomInt(modules.Count)];
+          ConfigNode[] data = container.moduleValues.GetNodes("ScienceData");
+          container.moduleValues.RemoveNode(data[Lib.RandomInt(data.Length)]);
+        }
       }
     }
-    // if not loaded
+    // our own science system
     else
     {
-      // get all science containers/experiments with data
-      var modules = new List<ProtoPartModuleSnapshot>();
-      modules.AddRange(Lib.FindModules(v.protoVessel, "ModuleScienceContainer").FindAll(k => k.moduleValues.GetNodes("ScienceData").Length > 0));
-      modules.AddRange(Lib.FindModules(v.protoVessel, "ModuleScienceExperiment").FindAll(k => k.moduleValues.GetNodes("ScienceData").Length > 0));
-
-      // remove a data sample at random
-      if (modules.Count > 0)
+      // select a file at random and remove it
+      Drive drive = DB.Vessel(v).drive;
+      if (drive.files.Count > 0) //< it should always be the case
       {
-        ProtoPartModuleSnapshot container = modules[Lib.RandomInt(modules.Count)];
-        ConfigNode[] data = container.moduleValues.GetNodes("ScienceData");
-        container.moduleValues.RemoveNode(data[Lib.RandomInt(data.Length)]);
+        string filename = string.Empty;
+        int i = Lib.RandomInt(drive.files.Count);
+        foreach(var pair in drive.files)
+        {
+          if (i-- == 0)
+          {
+            filename = pair.Key;
+            break;
+          }
+        }
+        drive.files.Remove(filename);
       }
     }
   }
@@ -1268,18 +1300,38 @@ public static class Lib
   }
 
   // get a material with the shader specified
-  static AssetBundle shaders;
+  static Dictionary<string, Material> shaders;
   public static Material GetShader(string name)
   {
     if (shaders == null)
     {
+      shaders = new Dictionary<string, Material>();
       string platform = "windows";
       if (Application.platform == RuntimePlatform.LinuxPlayer) platform = "linux";
       else if (Application.platform == RuntimePlatform.OSXPlayer) platform = "osx";
-      shaders = new WWW("file://" + KSPUtil.ApplicationRootPath + "GameData/Kerbalism/Shaders/_" + platform).assetBundle;
+      using(WWW bundle = new WWW("file://" + KSPUtil.ApplicationRootPath + "GameData/Kerbalism/Shaders/_" + platform))
+      {
+        if (bundle.error != null)
+        {
+          throw new Exception("shaders bundle not found");
+        }
+        foreach(Shader shader in bundle.assetBundle.LoadAllAssets<Shader>())
+        {
+          shaders.Add(shader.name.Replace("Custom/", string.Empty), new Material(shader));
+        }
+        bundle.assetBundle.Unload(false);
+        bundle.Dispose();
+      }
     }
-    return new Material(shaders.LoadAsset(name + ".shader") as Shader);
+
+    Material mat;
+    if (!shaders.TryGetValue(name, out mat))
+    {
+      throw new Exception("shader " + name + " not found");
+    }
+    return mat;
   }
+
 
 
   // --- CONFIG ---------------------------------------------------------------

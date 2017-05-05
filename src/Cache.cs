@@ -23,9 +23,9 @@ public sealed class vessel_info
     is_vessel = Lib.IsVessel(v);
     if (!is_vessel) return;
 
-    // determine if this is a resque mission vessel
-    is_resque = Misc.IsResqueMission(v);
-    if (is_resque) return;
+    // determine if this is a rescue mission vessel
+    is_rescue = Misc.IsRescueMission(v);
+    if (is_rescue) return;
 
     // dead EVA are not valid vessels
     if (EVA.IsDead(v)) return;
@@ -74,7 +74,7 @@ public sealed class vessel_info
 
     // radiation
     radiation = Radiation.Compute(v, position, gamma_transparency, sunlight, out blackout, out magnetosphere, out inner_belt, out outer_belt, out interstellar);
-    
+
     // extended atmosphere
     thermosphere = Sim.InsideThermosphere(v);
     exosphere = Sim.InsideExosphere(v);
@@ -102,7 +102,7 @@ public sealed class vessel_info
 
     // data about greenhouses
     greenhouses = Greenhouse.Greenhouses(v);
-    
+
     // other stuff
     gravioli = Sim.Graviolis(v);
   }
@@ -110,8 +110,8 @@ public sealed class vessel_info
 
   public UInt64       inc;                  // unique incremental id for the entry
   public bool         is_vessel;            // true if this is a valid vessel
-  public bool         is_resque;            // true if this is a resque mission vessel
-  public bool         is_valid;             // equivalent to (is_vessel && !is_resque && !eva_dead)
+  public bool         is_rescue;            // true if this is a rescue mission vessel
+  public bool         is_valid;             // equivalent to (is_vessel && !is_rescue && !eva_dead)
   public UInt32       id;                   // generate the id once
   public int          crew_count;           // number of crew on the vessel
   public int          crew_capacity;        // crew capacity of the vessel
@@ -189,17 +189,20 @@ public static class Cache
   public static void update()
   {
     // purge the oldest entry from the vessel cache
-    UInt64 oldest_inc = UInt64.MaxValue;
-    UInt32 oldest_id = 0;
-    foreach(KeyValuePair<UInt32, vessel_info> pair in vessels)
+    if (vessels.Count > 0)
     {
-      if (pair.Value.inc < oldest_inc)
+      UInt64 oldest_inc = UInt64.MaxValue;
+      UInt32 oldest_id = 0;
+      foreach(KeyValuePair<UInt32, vessel_info> pair in vessels)
       {
-        oldest_inc = pair.Value.inc;
-        oldest_id = pair.Key;
+        if (pair.Value.inc < oldest_inc)
+        {
+          oldest_inc = pair.Value.inc;
+          oldest_id = pair.Key;
+        }
       }
+      vessels.Remove(oldest_id);
     }
-    if (oldest_id > 0) vessels.Remove(oldest_id);
   }
 
 

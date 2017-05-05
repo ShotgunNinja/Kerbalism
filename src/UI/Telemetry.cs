@@ -10,14 +10,23 @@ public static class Telemetry
 {
   public static void telemetry(this Panel p, Vessel v)
   {
-    // if vessel doesn't exist anymore
-    if (FlightGlobals.FindVessel(v.id) == null) return;
+    // avoid corner-case when this is called in a lambda after scene changes
+    v = FlightGlobals.FindVessel(v.id);
+
+    // if vessel doesn't exist anymore, leave the panel empty
+    if (v == null) return;
 
     // get info from the cache
     vessel_info vi = Cache.VesselInfo(v);
 
-    // if not a valid vessel
+    // if not a valid vessel, leave the panel empty
     if (!vi.is_valid) return;
+
+    // set metadata
+    p.title(Lib.BuildString(Lib.Ellipsis(v.vesselName, 20), " <color=#cccccc>TELEMETRY</color>"));
+
+    // time-out simulation
+    if (p.timeout(vi)) return;
 
     // get vessel data
     VesselData vd = DB.Vessel(v);
@@ -37,9 +46,6 @@ public static class Telemetry
 
     // collapse eva kerbal sections into one
     if (v.isEVA) p.collapse("EVA SUIT");
-
-    // set metadata
-    p.title(Lib.BuildString(Lib.Ellipsis(v.vesselName, 20), " <color=#cccccc>TELEMETRY</color>"));
   }
 
 
@@ -47,8 +53,8 @@ public static class Telemetry
   {
     // don't show env panel in eva kerbals
     if (v.isEVA) return;
-    
-    // get all sensor readings     
+
+    // get all sensor readings
     HashSet<string> readings = new HashSet<string>();
     if (v.loaded)
     {
@@ -65,8 +71,8 @@ public static class Telemetry
       }
     }
     readings.Remove(string.Empty);
-      
-    p.section("ENVIRONMENT");      
+
+    p.section("ENVIRONMENT");
     foreach(string type in readings)
     {
       p.content(type, Sensor.telemetry_content(v, vi, type), Sensor.telemetry_tooltip(v, vi, type));
@@ -82,24 +88,15 @@ public static class Telemetry
     // if vessel is unmanned, do not show the panel
     if (vi.crew_count == 0) return;
 
-    // determine some content, with colors
-    string pressure_str = Lib.Color(Lib.HumanReadablePressure(vi.pressure * Sim.PressureAtSeaLevel()), vi.pressure < Settings.PressureThreshold, "yellow");
-    string poisoning_str = Lib.Color(Lib.HumanReadablePerc(vi.poisoning, "F2"), vi.poisoning > Settings.PoisoningThreshold * 0.5, "yellow");
-
     // render panel, add some content based on enabled features
+    p.section("HABITAT");
+    if (Features.Poisoning) p.content("co2 level", Lib.Color(Lib.HumanReadablePerc(vi.poisoning, "F2"), vi.poisoning > Settings.PoisoningThreshold, "yellow"));
     if (!v.isEVA)
     {
-      p.section("HABITAT");
-      if (Features.Pressure) p.content("pressure", pressure_str);
-      if (Features.Poisoning) p.content("co2 level", poisoning_str);
+      if (Features.Pressure) p.content("pressure", Lib.HumanReadablePressure(vi.pressure * Sim.PressureAtSeaLevel()));
       if (Features.Shielding) p.content("shielding", Habitat.shielding_to_string(vi.shielding));
       if (Features.LivingSpace) p.content("living space", Habitat.living_space_to_string(vi.living_space));
       if (Features.Comfort) p.content("comfort", vi.comforts.summary(), vi.comforts.tooltip());
-    }
-    else
-    {
-      p.section("HABITAT");
-      if (Features.Poisoning) p.content("co2 level", poisoning_str);
     }
   }
 
@@ -119,7 +116,7 @@ public static class Telemetry
       if (supplies == 0) p.section("SUPPLIES");
 
       // rate tooltip
-      string rate_tooltip = Math.Abs(res.rate) >= 0.0000001 ? Lib.BuildString
+      string rate_tooltip = Math.Abs(res.rate) >= 1e-10 ? Lib.BuildString
       (
         res.rate > 0.0 ? "<color=#00ff00><b>" : "<color=#ff0000><b>",
         Lib.HumanReadableRate(Math.Abs(res.rate)),
@@ -211,14 +208,14 @@ public static class Telemetry
         : "growing";
 
       // tooltip with summary
-      string tooltip = Lib.BuildString
+      string tooltip = greenhouse.growth < 0.99 ? Lib.BuildString
       (
         "<align=left />",
         "time to harvest\t<b>", Lib.HumanReadableDuration(greenhouse.tta), "</b>\n",
         "growth\t\t<b>", Lib.HumanReadablePerc(greenhouse.growth), "</b>\n",
         "natural lighting\t<b>", Lib.HumanReadableFlux(greenhouse.natural), "</b>\n",
         "artificial lighting\t<b>", Lib.HumanReadableFlux(greenhouse.artificial), "</b>"
-      );
+      ) : string.Empty;
 
       // render it
       p.content(Lib.BuildString("crop #", (i + 1).ToString()), state, tooltip);

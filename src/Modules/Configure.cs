@@ -40,7 +40,7 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
   double               extra_mass;                          // extra mass for selected setups, excluding resources
   bool                 initialized;                         // keep track of first configuration
   CrewSpecs            reconfigure_cs;                      // in-flight reconfiguration crew specs
-  Dictionary<int, int>  changes;      // store 'deferred' changes to avoid problems with unity gui
+  Dictionary<int, int> changes;                             // store 'deferred' changes to avoid problems with unity gui
 
   // used to avoid infinite recursion when dealing with symmetry group
   static bool avoid_inf_recursion;
@@ -56,16 +56,24 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
     while(count-- > 0) setups.Add(new ConfigureSetup(archive));
 
     // parse configuration from string data
-    archive = new ReadArchive(cfg);
-    archive.load(out count);
-    selected = new List<string>(count);
-    while(count-- > 0) { string s; archive.load(out s); selected.Add(s); }
+    // - we avoid corner case when cfg was never set up (because craft was never in VAB)
+    selected = new List<string>();
+    if (!string.IsNullOrEmpty(cfg))
+    {
+      archive = new ReadArchive(cfg);
+      archive.load(out count);
+      while(count-- > 0) { string s; archive.load(out s); selected.Add(s); }
+    }
 
     // parse previous configuration from string data
-    archive = new ReadArchive(prev_cfg);
-    archive.load(out count);
-    prev_selected = new List<string>(count);
-    while(count-- > 0) { string s; archive.load(out s); prev_selected.Add(s); }
+    // - we avoid corner case when prev_cfg was never set up (because craft was never in VAB)
+    prev_selected = new List<string>();
+    if (!string.IsNullOrEmpty(prev_cfg))
+    {
+      archive = new ReadArchive(prev_cfg);
+      archive.load(out count);
+      while(count-- > 0) { string s; archive.load(out s); prev_selected.Add(s); }
+    }
 
     // default title to part name
     if (title.Length == 0) title = Lib.PartName(part);
@@ -113,14 +121,6 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
       archive.save(0);
       prev_cfg = archive.serialize();
     }
-
-    // special care for users of version 1.1.5pre1
-    if (string.IsNullOrEmpty(prev_cfg))
-    {
-      var archive = new WriteArchive();
-      archive.save(0);
-      prev_cfg = archive.serialize();
-    }
   }
 
 
@@ -147,7 +147,9 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
 
     // make sure configuration include all available slots
     // this also create default configuration
-    if (Lib.IsEditor())
+    // - we don it only in the editor
+    // - we avoid corner case when cfg was never set up (because craft was never in VAB)
+    if (Lib.IsEditor() || selected.Count == 0)
     {
       while(selected.Count < Math.Min(slots, (uint)unlocked.Count))
       {
@@ -199,17 +201,14 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
         double amount = Lib.Parse.ToDouble(cr.amount);
         double capacity = Lib.Parse.ToDouble(cr.maxAmount);
 
-        // (de)install resource, but only if the following apply
-        // - in the editor
-        // - in flight, reconfigurable and not first time it is configured
-        if (Lib.IsEditor() || (reconfigure_cs && initialized))
+        // (de)install resource
+        if ((prev_active != (active && capacity > 0.0)) || (reconfigure_cs && initialized))
         {
           // if previously selected
           if (prev_active)
           {
             // remove the resources
-            // - in flight, do not remove amount
-            Lib.RemoveResource(part, cr.name, Lib.IsFlight() ? 0.0 : amount, capacity);
+            Lib.RemoveResource(part, cr.name, amount, capacity);
           }
 
           // if selected
@@ -397,9 +396,14 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
       string tech_id = pair.Key;
       List<string> setup_names = pair.Value;
 
+      // get tech title
+      // note: non-stock technologies will return empty titles, so we use tech-id directly in that case
+      string tech_title = ResearchAndDevelopment.GetTechnologyTitle(tech_id).ToLower();
+      tech_title = !string.IsNullOrEmpty(tech_title) ? tech_title : tech_id;
+
       // add tech name
       specs.add(string.Empty);
-      specs.add(Lib.BuildString("<color=#00ffff>", ResearchAndDevelopment.GetTechnologyTitle(tech_id).ToLower(), ":</color>"));
+      specs.add(Lib.BuildString("<color=#00ffff>", tech_title, ":</color>"));
 
       // add setup names
       foreach(string setup_name in setup_names)
@@ -484,19 +488,23 @@ public sealed class Configure : PartModule, IPartCostModifier, IPartMassModifier
 
   void render_panel(Panel p, ConfigureSetup setup, int selected_i, int setup_i)
   {
-    // render section title
+    // generate details, just once
+    // note: details were once elegantly serialized among all the other setup data,
+    //       see comment inside generate_details() to understand why this was necessary instead
+    setup.generate_details(this);
+
+    // render panel title
     // only allow reconfiguration if there are more setups than slots
     if (unlocked.Count <= selected.Count)
     {
-      p.section(setup.name);
+      p.section(setup.name, setup.desc);
     }
     else
     {
-      string desc = setup.desc.Length > 0 ? Lib.BuildString("<i>", setup.desc, "</i>") : string.Empty;
-      p.section(setup.name, desc, () => change_setup(-1, selected_i, ref setup_i), () => change_setup(1, selected_i, ref setup_i));
+      p.section(setup.name, setup.desc, () => change_setup(-1, selected_i, ref setup_i), () => change_setup(1, selected_i, ref setup_i));
     }
 
-    // render other content
+    // render details
     foreach(var det in setup.details)
     {
       p.content(det.label, det.value);
@@ -560,6 +568,57 @@ public sealed class ConfigureSetup
     {
       resources.Add(new ConfigureResource(res_node));
     }
+  }
+
+  public ConfigureSetup(ReadArchive archive)
+  {
+    // load basic data
+    archive.load(out name);
+    archive.load(out desc);
+    archive.load(out tech);
+    archive.load(out cost);
+    archive.load(out mass);
+
+    // load modules
+    int count;
+    archive.load(out count);
+    modules = new List<ConfigureModule>(count);
+    while(count-- > 0) modules.Add(new ConfigureModule(archive));
+
+    // load resources
+    archive.load(out count);
+    resources = new List<ConfigureResource>(count);
+    while(count-- > 0) resources.Add(new ConfigureResource(archive));
+  }
+
+  public void save(WriteArchive archive)
+  {
+    // save basic data
+    archive.save(name);
+    archive.save(desc);
+    archive.save(tech);
+    archive.save(cost);
+    archive.save(mass);
+
+    // save modules
+    archive.save(modules.Count);
+    foreach(ConfigureModule m in modules) m.save(archive);
+
+    // save resources
+    archive.save(resources.Count);
+    foreach(ConfigureResource r in resources) r.save(archive);
+  }
+
+  public void generate_details(Configure cfg)
+  {
+    // If a setup component is defined after the Configure module in the ConfigNode,
+    // then it is not present in the part during Configure::OnLoad (at precompilation time)
+    // so, find_module() will fail in that situation, resulting in no component details
+    // being added to the Configure window. Therefore we are forced to generate the details
+    // at first use every time the module is loaded, instead of generating them only once.
+
+    // already generated
+    if (details != null) return;
 
     // generate module details
     details = new List<Detail>();
@@ -613,64 +672,6 @@ public sealed class ConfigureSetup
       details.Add(new Detail("<b><color=#00ffff>Extra</color></b>"));
       if (mass > double.Epsilon) details.Add(new Detail("mass", Lib.HumanReadableMass(mass)));
       if (cost > double.Epsilon) details.Add(new Detail("cost", Lib.HumanReadableCost(cost)));
-    }
-  }
-
-  public ConfigureSetup(ReadArchive archive)
-  {
-    // load basic data
-    archive.load(out name);
-    archive.load(out desc);
-    archive.load(out tech);
-    archive.load(out cost);
-    archive.load(out mass);
-
-    // load modules
-    int count;
-    archive.load(out count);
-    modules = new List<ConfigureModule>(count);
-    while(count-- > 0) modules.Add(new ConfigureModule(archive));
-
-    // load resources
-    archive.load(out count);
-    resources = new List<ConfigureResource>(count);
-    while(count-- > 0) resources.Add(new ConfigureResource(archive));
-
-    // load details
-    archive.load(out count);
-    details = new List<Detail>(count);
-    while(count-- > 0)
-    {
-      Detail det = new Detail();
-      archive.load(out det.label);
-      archive.load(out det.value);
-      details.Add(det);
-    }
-  }
-
-  public void save(WriteArchive archive)
-  {
-    // save basic data
-    archive.save(name);
-    archive.save(desc);
-    archive.save(tech);
-    archive.save(cost);
-    archive.save(mass);
-
-    // save modules
-    archive.save(modules.Count);
-    foreach(ConfigureModule m in modules) m.save(archive);
-
-    // save resources
-    archive.save(resources.Count);
-    foreach(ConfigureResource r in resources) r.save(archive);
-
-    // save details
-    archive.save(details.Count);
-    foreach(Detail det in details)
-    {
-      archive.save(det.label);
-      archive.save(det.value);
     }
   }
 

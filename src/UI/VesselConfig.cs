@@ -10,14 +10,23 @@ public static class VesselConfig
 {
   public static void config(this Panel p, Vessel v)
   {
+    // avoid corner-case when this is called in a lambda after scene changes
+    v = FlightGlobals.FindVessel(v.id);
+
     // if vessel doesn't exist anymore, leave the panel empty
-    if (FlightGlobals.FindVessel(v.id) == null) return;
+    if (v == null) return;
 
     // get info from the cache
     vessel_info vi = Cache.VesselInfo(v);
 
     // if not a valid vessel, leave the panel empty
     if (!vi.is_valid) return;
+
+    // set metadata
+    p.title(Lib.BuildString(Lib.Ellipsis(v.vesselName, 20), " <color=#cccccc>VESSEL CONFIG</color>"));
+
+    // time-out simulation
+    if (p.timeout(vi)) return;
 
     // get data from db
     VesselData vd = DB.Vessel(v);
@@ -76,9 +85,6 @@ public static class VesselConfig
       p.content("script", string.Empty, tooltip);
       p.icon(vd.cfg_script ? Icons.toggle_green : Icons.toggle_red, tooltip, () => p.toggle(ref vd.cfg_script));
     }
-
-    // set metadata
-    p.title(Lib.BuildString(Lib.Ellipsis(v.vesselName, 20), " <color=#cccccc>VESSEL CONFIG</color>"));
   }
 }
 

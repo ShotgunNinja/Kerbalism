@@ -1,4 +1,91 @@
-#CHANGELOG
+### CHANGELOG
+
+1.2.6
+  - improved Bluedog support patch (@ModZero)
+  - SSTU support patch (@Maxzhao1999)
+  - reduced monoprop fuel cell rates, adapt to required EC  
+  - fix: planner not considering solar panels after last update
+  - fix: exception in Configure module for crafts that never entered VAB  
+  - fix: duplicate extend/retract in some supported antennas
+  
+1.2.5    
+  - detect and avoid issues at high timewarp in external modules
+  - hack stock solar panels and RTGs to use resource cache
+  - RTGs decay over time, with an half-life of 28.8 kerbin-years  
+  - corrected all chemical reactions, some were very wrong  
+  - fix: solar panel sun visibility sampling error at max timewarp for loaded vessels (#95)
+  - fix: impossible to guarantee coherency in resource simulation of loaded vessels (#96)  
+
+1.2.4
+  - SMURFF compatibility patch (@eberkain)
+  - Laboratory module satisfy stock contracts
+  - fix: resource amount not clamped to capacity
+  - fix: script editor window UB after scene changes
+
+1.2.3
+  - resource cache production/consumption simulate ALL_VESSEL_BALANCED
+  - added Waste Incinerator process to ISRU chemical plants
+  - moved Waste Compressor process from manned pods to ISRU chemical plants
+  - EVA kerbals now have a non-regenerative scrubber, with fixed duration
+  - increased amount of EC and Oxygen on EVA kerbals
+  - improved description of configure setups
+  - scale low-gain and high-gain antenna distances differently in supported planet packs
+  - lowered xmit scalar threshold used to deduce if data is file or sample
+  - safemode malfunctions don't stop timewarp anymore
+  - support patch for RLA Stockalike Continued (@YaarPodshipnik)
+  - NearFuture PB-AS-NUK emit radiation (@YaarPodshipnik)
+
+1.2.2
+  - fix: remove stock antenna from probe cores
+
+1.2.1
+  - new ECLSS component: Waste Compressor, compress Waste into Shielding
+  - new ECLSS component: Monoprop Fuel Cell, burn Monoprop and has Water+Nitrogen by-products
+  - atmosphere is breathable on all bodies containing oxygen, when pressure is above 25 kPA
+  - proper experience bonus calculation in stock converters and harvesters (@Gotmachine)
+  - MOLE solar panels support in planner and background simulation  (@Gotmachine)
+  - support patches for SXT & HGR, improved patches for VSR & HabTech, and more (@Eberkain)
+  - support patch for OrbitalTug (@PiezPiedPie)
+  - fix: cache stop updating after planting flag (#50, #52, #75)
+  - fix: exception in main loop when space weather is disabled (#78)
+  - fix: exception in planner analysis when comfort modifier is used in a process (#79)
+  - fix: greenhouse harvest ready message spam
+  - fix: missing configure setup descriptions in some cases
+
+1.2.0
+  - process: it is possible to specify the set of output resources that can be dumped overboard
+  - background/planner simulation of stock converter module support DumpExcess flag
+  - fuel cell, water recycler and waste processor adapt consumption to required production
+  - reduced atmosphere leak rate by 80%
+  - allow scripts to be executed even without electric charge
+  - added HardDrive to labs
+  - removed ControlRate setting
+  - fat-finger breakdown event support new Science system (#53)
+  - fix: do not allow stock science lab modules around when Science is enabled
+  - fix: toggling processes on unloaded vessels using automation doesn't really toggle it (#71)
+
+1.1.9
+  - SoundingRockets support patch by ValynEritai
+  - BluedogDesignBureau support patch by ValynEritai & Maxzhao1999
+  - OrbitalScience sigint antenna support patch by alaxandir
+  - increased amount of resources on_rescue
+  - waste processor can be toggled on/off
+  - rebalanced ECLSS modules, capacity now proportional to crew capacity
+  - rebalanced climatization: less EC cost, longer degeneration time
+  - greenhouse has integrated pressure control
+  - monitor panels require a connection on unmanned vessels
+  - only remove stock conversions from ISRU, don't touch third-party ones
+  - there is now an Extra/ folder containing patches not enabled by default
+  - ad-hoc habitat volume/surfaces for all stock parts and a ton of other ones, by schrema
+  - fix: amount of configurable resources is reset after vessel load in editor
+  - fix: wrong capacity in ISRU setups
+  - fix: wrong savegame version saved
+  - fix: missing setup details in Configure window when module is defined after (#57)
+  - fix: missing name of non-stock tech in Configure module part tooltip (#58)
+  - fix: monitor don't forget selected vessel when flagged as debris after selection (#60)
+  - fix: automation panel throw exception on duplicate id (#65)
+  - fix: asset bundle loading cause problems in HullCam/KronalVesselViewer (#66)
+  - fix: ContractConfigurator packs not working with Laboratory/Antenna module (#68)
 
 1.1.8
   - the science dialog is back (but can be hidden with settings)

@@ -64,7 +64,6 @@ public static class Settings
     // signal
     UnlinkedControl             = Lib.ConfigEnum (cfg, "UnlinkedControl",             UnlinkedCtrl.none);
     ExtendedAntenna             = Lib.ConfigValue(cfg, "ExtendedAntenna",             true);
-    ControlRate                 = Lib.ConfigValue(cfg, "ControlRate",                 0.000001); // 1 bps
 
     // science
     ScienceDialog               = Lib.ConfigValue(cfg, "ScienceDialog",               true);
@@ -76,6 +75,7 @@ public static class Settings
     IncentiveRedundancy         = Lib.ConfigValue(cfg, "IncentiveRedundancy",         false);
 
     // misc
+    EnforceCoherency            = Lib.ConfigValue(cfg, "EnforceCoherency",            true);
     TrackingPivot               = Lib.ConfigValue(cfg, "TrackingPivot",               true);
     HeadLampsCost               = Lib.ConfigValue(cfg, "HeadLampsCost",               0.002);
     DeathReputation             = Lib.ConfigValue(cfg, "DeathReputation",             100.0f);
@@ -130,7 +130,6 @@ public static class Settings
   // signal
   public static UnlinkedCtrl UnlinkedControl;             // available control for unlinked vessels: 'none', 'limited' or 'full'
   public static bool   ExtendedAntenna;                   // antenna only work if extended
-  public static double ControlRate;                       // data rate required for control, in Mb/s
 
   // science
   public static bool   ScienceDialog;                     // keep showing the stock science dialog
@@ -142,6 +141,7 @@ public static class Settings
   public static bool   IncentiveRedundancy;               // if true, each malfunction will increase the MTBF of components in the same redundancy group
 
   // misc
+  public static bool   EnforceCoherency;                  // detect and avoid issues at high timewarp in external modules
   public static bool   TrackingPivot;                     // simulate tracking solar panel around the pivot
   public static double HeadLampsCost;                     // EC/s cost if eva headlamps are on
   public static float  DeathReputation;                   // reputation to remove in case of death

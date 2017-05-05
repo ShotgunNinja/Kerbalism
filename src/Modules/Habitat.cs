@@ -165,25 +165,20 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     if (Lib.IsFlight())
     {
       // shortcuts
-      resource_info vessel_atmo = ResourceCache.Info(vessel, "Atmosphere");
-      PartResource hab_atmo = part.Resources["Atmosphere"];
-
-      // get amount of atmosphere in part
-      double hab_amount = hab_atmo.amount;
+      PartResource atmo = part.Resources["Atmosphere"];
+      PartResource waste = part.Resources["WasteAtmosphere"];
 
       // venting succeeded if the amount reached zero
-      if (hab_amount <= double.Epsilon) return State.disabled;
+      if (atmo.amount <= double.Epsilon && waste.amount <= double.Epsilon) return State.disabled;
 
-      // determine venting speed
-      double amount = volume * equalize_speed * Kerbalism.elapsed_s;
+      // how much to vent
+      double rate = volume * equalize_speed * Kerbalism.elapsed_s;
+      double atmo_k = atmo.amount / (atmo.amount + waste.amount);
+      double waste_k = waste.amount / (atmo.amount + waste.amount);
 
-      // consume from the part, clamp amount to what's available in the part
-      amount = Math.Min(amount, hab_atmo.amount);
-      hab_atmo.amount -= amount;
-
-      // produce in all enabled habs in the vessel
-      // (attempt recovery, but dump overboard if there is no capacity left)
-      vessel_atmo.Produce(amount);
+      // consume from the part, clamp amount to what's available
+      atmo.amount = Math.Max(atmo.amount - rate * atmo_k, 0.0);
+      waste.amount = Math.Max(waste.amount - rate * waste_k, 0.0);
 
       // venting still in progress
       return State.venting;
@@ -193,6 +188,7 @@ public sealed class Habitat : PartModule, ISpecifics, IConfigurable
     {
       // set amount to zero
       part.Resources["Atmosphere"].amount = 0.0;
+      part.Resources["WasteAtmosphere"].amount = 0.0;
 
       // return new state
       return State.disabled;
