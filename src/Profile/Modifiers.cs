@@ -58,6 +58,10 @@ public static class Modifiers
         case "per_capita":
           k /= (double)Math.Max(vi.crew_count, 1);
           break;
+          
+        case "crew_count":
+          k *= (double)vi.crew_count;
+          break;
 
         default:
           k *= resources.Info(v, mod).amount;
@@ -117,6 +121,10 @@ public static class Modifiers
 
         case "per_capita":
           k /= (double)Math.Max(va.crew_count, 1);
+          break;
+          
+        case "crew_count":
+          k *= (double)va.crew_count;
           break;
 
         default:
