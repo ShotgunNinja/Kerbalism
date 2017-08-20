@@ -41,9 +41,9 @@
       {
         name = LiquidFuel
         amount = #$../../../RESOURCE[LiquidFuel]/amount$
-        amount += #$../../../RESOURCE[Oxidizer]/amount$
+        @amount += #$../../../RESOURCE[Oxidizer]/amount$
         maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
-        maxAmount += #$../../../RESOURCE[Oxidizer]/maxAmount$
+        @maxAmount += #$../../../RESOURCE[Oxidizer]/maxAmount$
       }
     }
     SETUP
@@ -54,9 +54,9 @@
       {
         name = Oxidizer
         amount = #$../../../RESOURCE[LiquidFuel]/amount$
-        amount += #$../../../RESOURCE[Oxidizer]/amount$
+        @amount += #$../../../RESOURCE[Oxidizer]/amount$
         maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
-        maxAmount += #$../../../RESOURCE[Oxidizer]/maxAmount$
+        @maxAmount += #$../../../RESOURCE[Oxidizer]/maxAmount$
       }
     }
   }
@@ -83,17 +83,17 @@
       {
         name = LiquidFuel
         amount = #$../../../RESOURCE[LiquidFuel]/amount$
-        amount *= 0.45
+        @amount *= 0.45
         maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
-        maxAmount *= 0.45
+        @maxAmount *= 0.45
       }
       RESOURCE
       {
         name = Oxidizer
         amount = #$../../../RESOURCE[LiquidFuel]/amount$
-        amount *= 0.55
+        @amount *= 0.55
         maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
-        maxAmount *= 0.55
+        @maxAmount *= 0.55
       }
     }
     SETUP
