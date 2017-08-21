@@ -14,7 +14,7 @@
     name = Configure
     title = Fuel Tank
     slots = 1
-    reconfigure = Engineer@2
+    reconfigure = true // anyone
     
     SETUP
     {
@@ -73,7 +73,7 @@
     name = Configure
     title = Fuel Tank
     slots = 1
-    reconfigure = Engineer@2
+    reconfigure = true // anyone
     
     SETUP
     {
