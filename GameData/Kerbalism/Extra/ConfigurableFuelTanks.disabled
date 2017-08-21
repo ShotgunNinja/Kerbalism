@@ -1,0 +1,183 @@
+// rename from 'ConfigurableFuelTanks.disabled' to 'ConfigurableFuelTanks.cfg' to enable, viceversa to disable
+
+// ============================================================================
+// Allows fuel tanks to be converted between liquid fuel and oxidizer.
+// This patch will conflict with the wet workshop patch and certain third-party mods that may change what is
+// stored inside the fuel tanks, and that is why it is disabled by default.
+// ============================================================================
+
+// Liquid fuel and oxidizer tanks
+@PART[*]:HAS[@RESOURCE[LiquidFuel],@RESOURCE[Oxidizer],!MODULE[ModuleEnginesFX],!MODULE[ModuleEngines],!MODULE[ModuleResourceIntake]]:FOR[Kerbalism]
+{
+  MODULE
+  {
+    name = Configure
+    title = Fuel Tank
+    slots = 1
+    reconfigure = true // anyone
+    
+    SETUP
+    {
+      name = Liquid Fuel & Oxidizer
+      desc = Stores an appropriate mix of <b>Liquid Fuel</b> and <b>Oxidizer</b>
+      RESOURCE
+      {
+        name = LiquidFuel
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+      }
+      RESOURCE
+      {
+        name = Oxidizer
+        amount = #$../../../RESOURCE[Oxidizer]/amount$
+        maxAmount = #$../../../RESOURCE[Oxidizer]/maxAmount$
+      }
+    }
+    SETUP
+    {
+      name = Liquid Fuel
+      desc = Stores a sizable amount of <b>Liquid Fuel</b>
+      RESOURCE
+      {
+        name = LiquidFuel
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        @amount += #$../../../RESOURCE[Oxidizer]/amount$
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+        @maxAmount += #$../../../RESOURCE[Oxidizer]/maxAmount$
+      }
+    }
+    SETUP
+    {
+      name = Oxidizer
+      desc = Stores a sizable amount of <b>Oxidizer</b>
+      RESOURCE
+      {
+        name = Oxidizer
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        @amount += #$../../../RESOURCE[Oxidizer]/amount$
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+        @maxAmount += #$../../../RESOURCE[Oxidizer]/maxAmount$
+      }
+    }
+  }
+  
+  !RESOURCE[LiquidFuel] { }
+  !RESOURCE[Oxidizer] { }
+}
+
+// Liquid fuel only tanks
+@PART[*]:HAS[@RESOURCE[LiquidFuel],!RESOURCE[Oxidizer],!MODULE[ModuleEnginesFX],!MODULE[ModuleEngines],!MODULE[ModuleResourceIntake]]:FOR[Kerbalism]
+{
+  MODULE
+  {
+    name = Configure
+    title = Fuel Tank
+    slots = 1
+    reconfigure = true // anyone
+    
+    SETUP
+    {
+      name = Liquid Fuel & Oxidizer
+      desc = Stores an appropriate mix of <b>Liquid Fuel</b> and <b>Oxidizer</b>
+      RESOURCE
+      {
+        name = LiquidFuel
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        @amount *= 0.45
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+        @maxAmount *= 0.45
+      }
+      RESOURCE
+      {
+        name = Oxidizer
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        @amount *= 0.55
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+        @maxAmount *= 0.55
+      }
+    }
+    SETUP
+    {
+      name = Liquid Fuel
+      desc = Stores a sizable amount of <b>Liquid Fuel</b>
+      RESOURCE
+      {
+        name = LiquidFuel
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+      }
+    }
+    SETUP
+    {
+      name = Oxidizer
+      desc = Stores a sizable amount of <b>Oxidizer</b>
+      RESOURCE
+      {
+        name = Oxidizer
+        amount = #$../../../RESOURCE[LiquidFuel]/amount$
+        maxAmount = #$../../../RESOURCE[LiquidFuel]/maxAmount$
+      }
+    }
+  }
+  
+  !RESOURCE[LiquidFuel] { }
+}
+
+// Update tank names and description - Squad
+@PART[miniFuselage]:FOR[Kerbalism] {
+  @title = Mk0 Fuel Fuselage
+  @description = A small container for fuel.
+}
+@PART[mk2Fuselage]:FOR[Kerbalism] {
+  @title = Mk2 Fuel Fuselage
+  @description = This airframe fuselage features the latest in lifting technology. Not only does it stay together during flight, it's sleek design makes your plane just that much speedier!
+}
+!PART[mk2FuselageLongLFO]:FOR[Kerbalism] {}
+@PART[mk2FuselageShortLiquid]:FOR[Kerbalism] {
+  @title = Mk2 Fuel Fuselage Short
+  @description = This airframe fuselage features the latest in lifting technology. Not only does it stay together during flight, it's sleek design makes your plane just that much speedier!
+}
+!PART[mk2FuselageShortLFO]:FOR[Kerbalism] {}
+@PART[mk3FuselageLF_25]:FOR[Kerbalism] {
+  @title = Mk3 Fuel Fuselage Short
+}
+!PART[mk3FuselageLFO_25]:FOR[Kerbalism] {}
+@PART[mk3FuselageLF_50]:FOR[Kerbalism] {
+  @title = Mk3 Fuel Fuselage
+}
+!PART[mk3FuselageLFO_50]:FOR[Kerbalism] {}
+@PART[mk3FuselageLF_100]:FOR[Kerbalism] {
+  @title = Mk3 Fuel Fuselage Long
+}
+!PART[mk3FuselageLFO_100]:FOR[Kerbalism] {}
+
+// Update tank names and description - VenStockRevamp
+@PART[softTankMK1]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Rockomax MK1 SoftShell tank
+}
+@PART[softTankMK2]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Rockomax MK2 SoftShell tank
+}
+@PART[softTankMK3]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Rockomax MK3 SoftShell tank
+}
+@PART[softTankMK4]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Rockomax MK4 SoftShell tank
+}
+@PART[softTankMK5]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Rockomax MK5 SoftShell tank
+}
+@PART[RadialLF]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Stratus-VI Roundified Fuel Tank
+  @description = A Repourposed Stratus-V tank, the Stratus-VI now stores fuel instead of monopropellant.
+}
+!PART[RadialLFO] {}
+@PART[RadialLFLong]:FOR[Kerbalism]:AFTER[VenStockRevamp] {
+  @title = Stratus-VI Cylindrified Fuel Tank
+  @description = A Repourposed Stratus-V tank, the Stratus-VI now stores fuel instead of monopropellant.
+}
+!PART[RadialLFOLong] {}
+@PART[MK1LFOFuselage] {
+  @title = Mk1 Fuel Fuselage
+  @description = An upgraded fuselage that carries fuel for spaceplanes. This tank is a tougher version of the FL-T400, but weighs more to gain an increase in crash tolerance.
+}
