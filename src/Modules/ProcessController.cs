@@ -68,6 +68,8 @@ public sealed class ProcessController : PartModule, IModuleInfo, IAnimatedModule
     // note: this has to be done constantly to prevent the user from changing it
     Lib.SetResourceFlow(part, resource, running);
 
+    Events["Toggle"].guiActive = ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
+    if (running && ResourceCache.Info(part.vessel, "ElectricCharge").amount <= double.Epsilon) Toggle();
     // update rmb ui
     Events["Toggle"].guiName = Lib.StatusToggle(title, running ? "running" : "stopped");
   }
