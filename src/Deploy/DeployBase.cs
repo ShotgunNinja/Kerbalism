@@ -23,6 +23,8 @@ namespace KERBALISM
 
     // I check if vessel has EC to consume, otherwise will disable animations and functions of the part.
     public bool hasEC;
+    // To do less botton flash, only show action if has more ec that deploy needs.
+    public double amountECleft;
 
     public string thisModule;
 
@@ -41,14 +43,18 @@ namespace KERBALISM
       return false;
     }
 
-    public virtual void FixedUpdate()
+    public virtual void Update()
     {
       if (FixGame(thisModule)) return;
+      amountECleft = ResourceCache.Info(part.vessel, "ElectricCharge").amount;
+      hasEC = amountECleft > double.Epsilon;
+    }
 
-      hasEC = ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
+    public virtual void FixedUpdate()
+    {
+      part.ModulesOnUpdate();
       if (GetIsActive())
       {
-        part.ModulesOnUpdate();
         // get resource cache
         vessel_resources resources = ResourceCache.Get(part.vessel);
         resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
