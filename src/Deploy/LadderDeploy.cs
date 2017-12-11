@@ -40,41 +40,33 @@
       base.Update();
 
       // Update GUI
-      if (hasEC)
-      {
-        if (!isPlaying && amountECleft > ecDeploy)
-        {
-          this.Events["RetractLadder"].guiActive = targetState != "Retracted";
-          this.Events["RetractLadder"].guiActiveUnfocused = targetState != "Retracted";
-
-          this.Events["ExtendLadder"].guiActive = targetState == "Retracted";
-          this.Events["ExtendLadder"].guiActiveUnfocused = targetState == "Retracted";
-          return;
-        }
-      }
-      this.Events["RetractLadder"].guiActive = false;
-      this.Events["RetractLadder"].guiActiveUnfocused = false;
-      this.Events["ExtendLadder"].guiActive = false;
-      this.Events["ExtendLadder"].guiActiveUnfocused = false;
+      Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && isPlaying);
+      Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && isPlaying);
     }
 
-    public override bool GetIsActive()
+    public override bool IsActive
     {
-      if (!Features.Deploy)
+      get
       {
-        if (ladder != null) ladder.isEnabled = true;
-        return false;
-      }
+        if (ladder != null)
+        {
+          if (!Features.Deploy)
+          {
+            ladder.isEnabled = true;
+            return false;
+          }
 
-      if (targetState == "") targetState = ladder.StateName;
+          if (targetState == "") targetState = ladder.StateName;
 
-      if (targetState == ladder.StateName)
-      {
-        isPlaying = false;
-        actualECCost = 0;
+          if (targetState == ladder.StateName)
+          {
+            isPlaying = false;
+            actualECCost = 0;
+          }
+          else actualECCost = ecDeploy;
+        }
+        return isPlaying;
       }
-      else actualECCost = ecDeploy;
-      return isPlaying;
     }
   }
 }

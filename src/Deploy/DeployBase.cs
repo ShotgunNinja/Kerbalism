@@ -35,7 +35,7 @@ namespace KERBALISM
         PartModule thisModule = Lib.FindModule(part, module);
         if (thisModule != null)
         {
-          GetIsActive();
+          bool isActive = IsActive;
           part.RemoveModule(thisModule);
         }
         return true;
@@ -53,7 +53,7 @@ namespace KERBALISM
     public virtual void FixedUpdate()
     {
       part.ModulesOnUpdate();
-      if (GetIsActive())
+      if (IsActive)
       {
         // get resource cache
         vessel_resources resources = ResourceCache.Get(part.vessel);
@@ -62,7 +62,7 @@ namespace KERBALISM
       else actualECCost = 0;
     }
 
-    public abstract bool GetIsActive();
+    public abstract bool IsActive { get; }
 
     public abstract void Start();
   }
