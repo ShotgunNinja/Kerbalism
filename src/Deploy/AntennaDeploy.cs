@@ -4,58 +4,72 @@
   public class AntennaDeploy : DeployBase
   {
     Antenna antenna;
-    ModuleDataTransmitter transmitter;
+    ModuleAnimationGroup customAnim;
 
-    ModuleAnimationGroup kerbalismAnimation;
-    ModuleDeployableAntenna stockAnimation;
+    ModuleDataTransmitter transmitter;
+    ModuleDeployableAntenna stockAnim;
 
     // When is consuming EC
     bool isTransmitting;
     bool isMoving;
 
-    public override void Start()
+    public override void OnStart(StartState state)
     {
+      if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
       thisModule = "AntennaDeploy";
-      if (Features.Signal)
+      // Kerbalism modules
+      antenna = part.FindModuleImplementing<Antenna>();
+      customAnim = part.FindModuleImplementing<ModuleAnimationGroup>();
+      // KSP modules
+      transmitter = part.FindModuleImplementing<ModuleDataTransmitter>();
+      stockAnim = part.FindModuleImplementing<ModuleDeployableAntenna>();
+
+      // I'm using the antennaModule to save distance & extend, this works for 2 purpose. 
+      //  First: When someone disable CommNet, Kerbalism antenna will work fine until extend is saved
+      //  Second:	CommNet verify if transmitter.canComm == (isdeploy || moduleisActive)
+      //    when the transmitter dosn't has deploy(is fixed), the only way to disable the connection is Setting distance to 0 when no EC, forcing CommNet lost connection.
+      if (transmitter != null) transmitter.isEnabled = !Features.Signal;
+      if (stockAnim != null) stockAnim.isEnabled = !Features.Signal;
+
+      if (antenna != null) antenna.isEnabled = Features.Signal;
+      if (customAnim != null)
       {
-        antenna = part.FindModuleImplementing<Antenna>();
-        kerbalismAnimation = part.FindModuleImplementing<ModuleAnimationGroup>();
+        antenna.extended = customAnim.isDeployed;
+        customAnim.isEnabled = Features.Signal;
       }
       else
       {
-        transmitter = part.FindModuleImplementing<ModuleDataTransmitter>();
-        stockAnimation = part.FindModuleImplementing<ModuleDeployableAntenna>();
-
-        // Future use:
-        // I'm using the antennaModule to save distance & extend, this works for 2 purpose. 
-        //  First: When someone disable CommNet, Kerbalism antenna will work fine until extend is saved
-        //  Second:	CommNet verify if transmitter.canComm == (isdeploy || moduleisActive)
-        //    when the transmitter dosn't has deploy(is fixed), the only way to disable the connection is Setting distance to 0 when no EC, forcing CommNet lost connection.
-        antenna = part.FindModuleImplementing<Antenna>();
-        kerbalismAnimation = part.FindModuleImplementing<ModuleAnimationGroup>();
-        if (antenna != null) antenna.isEnabled = false;
-        if (kerbalismAnimation != null) kerbalismAnimation.isEnabled = false;
+        antenna.extended = true;
       }
     }
 
     public override void FixedUpdate()
     {
-      // get vessel info from the cache to verify if it is transmitting or relaying
-      vessel_info vi = Cache.VesselInfo(part.vessel);
-      if(Cache.HasVesselInfo(part.vessel, out vi)) isTransmitting = (vi.transmitting.Length > 0 || vi.relaying.Length > 0);
-
-      if (IsActive)
+      if (Features.Deploy)
       {
-        part.ModulesOnUpdate();
-        vessel_resources resources = ResourceCache.Get(part.vessel);
-        if (!isTransmitting || isMoving) resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
-        // Just show the value on screen for antennaModule
+        if (Features.Signal)
+        {
+          // get vessel info from the cache to verify if it is transmitting or relaying
+          vessel_info vi = Cache.VesselInfo(part.vessel);
+          if (Cache.HasVesselInfo(part.vessel, out vi)) isTransmitting = (vi.transmitting.Length > 0 || vi.relaying.Length > 0);
+        }
         else
         {
-          actualECCost = antenna.cost;
+          isTransmitting = false;
         }
+        if (IsActive)
+        {
+          part.ModulesOnUpdate();
+          vessel_resources resources = ResourceCache.Get(part.vessel);
+          if (!isTransmitting || isMoving) resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+          else
+          {
+            // Just show the value on screen for module, but not consume
+            actualECCost = antenna.cost;
+          }
+        }
+        else actualECCost = 0;
       }
-      else actualECCost = 0;
     }
 
     public override bool IsActive
@@ -67,69 +81,62 @@
           // Just to make sure that has the modules target
           if (antenna == null) return false;
 
-          // Fix the modules if the Feature deploy has been disable.
-          if (!Features.Deploy)
-          {
-            if (antenna != null) antenna.isEnabled = true;
-            if (transmitter != null) transmitter.isEnabled = true;
-            return false;
-          }
-
           if (hasEC)
           {
-            // Enable module when has ec
-            if (kerbalismAnimation != null) kerbalismAnimation.isEnabled = true;
-
-            antenna.isEnabled = true;
-
-            // If kerbalismAnimation == null, antenna is fixed
-            if (kerbalismAnimation != null)
+            if (customAnim != null)
             {
+              // Enable module when has ec
+              customAnim.isEnabled = true;
+              antenna.extended = customAnim.isDeployed;
+
+              // Update values of stock Modules
+              stockAnim.deployState = (customAnim.isDeployed ? ModuleDeployablePart.DeployState.EXTENDED : ModuleDeployablePart.DeployState.RETRACTED);
+
               // Add cost to Extending/Retracting
-              if (kerbalismAnimation.DeployAnimation.isPlaying)
+              if (customAnim.DeployAnimation.isPlaying)
               {
                 actualECCost = ecDeploy;
                 isMoving = true;
                 return true;
               }
-              else if (kerbalismAnimation.isDeployed && !kerbalismAnimation.DeployAnimation.isPlaying)
+              else if (customAnim.isDeployed)
               {
                 actualECCost = ecCost;
                 isMoving = false;
                 return true;
               }
+              else
+              {
+                // if hit here, this means that antenna has animation but is not extended nor playing.
+                return false;
+              }
             }
             else
             {
               // this means that antenna is fixed
+              // Make antenna not valid to AntennaInfo
+              antenna.extended = true;
               actualECCost = ecCost;
               isMoving = false;
               return true;
             }
-            // if hit here, this means that antenna has animation but is not extended nor playing.
-            return false;
           }
           else
           {
-            if (kerbalismAnimation != null) kerbalismAnimation.isEnabled = false;
-            antenna.isEnabled = false;
+            // Make antenna not valid to AntennaInfo
+            antenna.extended = false;
+
+            if (customAnim != null)
+            {
+              customAnim.isEnabled = false;
+              // Update values of stock Modules
+              stockAnim.deployState = (customAnim.isDeployed ? ModuleDeployablePart.DeployState.EXTENDED : ModuleDeployablePart.DeployState.RETRACTED);
+            }
             return false;
           }
         }
         else
         {
-          // Fix the modules if the Feature deploy has been disable.
-          if (!Features.Deploy)
-          {
-            if (transmitter != null) transmitter.isEnabled = true;
-            if (stockAnimation != null) stockAnimation.isEnabled = true;
-
-            if (antenna != null) antenna.isEnabled = false;
-            if (kerbalismAnimation != null) kerbalismAnimation.isEnabled = false;
-
-            return false;
-          }
-
           if (antenna == null && transmitter == null) return false;
 
           antenna.dist = (antenna.dist != transmitter.antennaPower && transmitter.antennaPower > 0 ? transmitter.antennaPower : antenna.dist);
@@ -138,57 +145,56 @@
           {
             transmitter.antennaPower = antenna.dist;
 
-            // If deployableAntenna == null, Transmitter is fixed
-            if (stockAnimation != null)
+            if (stockAnim != null)
             {
-              stockAnimation.isEnabled = true;
+              stockAnim.isEnabled = true;
+              // Update values of Kerbalism Modules
+              customAnim.isDeployed = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
+              antenna.extended = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
 
               // Add cost to Extending/Retracting
-              if (stockAnimation.deployState == ModuleDeployablePart.DeployState.RETRACTING || stockAnimation.deployState == ModuleDeployablePart.DeployState.EXTENDING)
+              if (stockAnim.deployState == ModuleDeployablePart.DeployState.RETRACTING || stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDING)
               {
                 actualECCost = ecDeploy;
                 isMoving = true;
                 return true;
               }
-              else if (stockAnimation.deployState == ModuleDeployablePart.DeployState.EXTENDED)
+              else if (stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED)
               {
                 actualECCost = ecCost;
                 isMoving = false;
 
                 // Save the antenna status for Enable\Disable Signal support.
                 antenna.extended = true;
-                if (kerbalismAnimation != null) kerbalismAnimation.isDeployed = true;
+                if (customAnim != null) customAnim.isDeployed = true;
                 return true;
               }
+              else
+              {
+                // if hit here, this means that antenna has animation but is not extended nor playing.
+                return false;
+              }
             }
+            // If deployableAntenna == null, Transmitter is fixed
             else
             {
               actualECCost = ecCost;
               isMoving = false;
-              // Save the antenna status for Enable\Disable Signal support.
-              antenna.extended = true;
-              if (kerbalismAnimation != null) kerbalismAnimation.isDeployed = true;
+              // I don't need update value when don't have animation, Kerbalism assume antenna.extended=true
               return true;
             }
-            // if hit here, this means that antenna has animation but is not extended nor playing.
-            return false;
           }
           else
           {
-            if (stockAnimation != null)
+            if (stockAnim != null)
             {
-              stockAnimation.isEnabled = false;
+              stockAnim.isEnabled = false;
 
-              // Save the antenna status for Enable\Disable Signal support.
-              if (kerbalismAnimation != null) kerbalismAnimation.isDeployed = stockAnimation.deployState == ModuleDeployablePart.DeployState.EXTENDED;
-              antenna.extended = stockAnimation.deployState == ModuleDeployablePart.DeployState.EXTENDED;
+              // Update values of Kerbalism Modules
+              customAnim.isDeployed = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
+              antenna.extended = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
             }
-            else
-            {
-              // Save the antenna status for Enable\Disable Signal support.
-              if (kerbalismAnimation != null) kerbalismAnimation.isDeployed = true;
-              antenna.extended = true;
-            }
+            // Change the range to 0, causing CommNet to lose the signal
             transmitter.antennaPower = 0;
             return false;
           }

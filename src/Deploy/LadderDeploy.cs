@@ -25,7 +25,7 @@
     public string targetState = "";
     public bool isPlaying;
 
-    public override void Start()
+    public override void OnActive()
     {
       thisModule = "LadderDeploy";
       ladder = part.FindModuleImplementing<RetractableLadder>();
@@ -35,19 +35,14 @@
       }
     }
 
-    public override void Update()
-    {
-      base.Update();
-
-      // Update GUI
-      Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && isPlaying);
-      Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && isPlaying);
-    }
-
     public override bool IsActive
     {
       get
       {
+        // Update GUI
+        Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && isPlaying);
+        Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && isPlaying);
+
         if (ladder != null)
         {
           if (!Features.Deploy)

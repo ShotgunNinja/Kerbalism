@@ -4,8 +4,9 @@
   {
     ModuleAnimationGroup mining;
     Harvester harvester;
-    public override void Start()
+    public override void OnStart(StartState state)
     {
+      if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
       thisModule = "DrillDeploy";
       mining = part.FindModuleImplementing<ModuleAnimationGroup>();
       foreach (PartModule pModule in part.FindModulesImplementing<Harvester>())
