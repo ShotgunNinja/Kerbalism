@@ -9,10 +9,9 @@ using UnityEngine;
 
 namespace KERBALISM {
 
-
 public static class Lib
 {
-  // --- UTILS ----------------------------------------------------------------
+	#region UTILS ----------------------------------------------------------------
 
   // write a message to the log
   public static void Log(string msg)
@@ -46,8 +45,9 @@ public static class Lib
     a = tmp;
   }
 
+    #endregion
 
-  // --- MATH -----------------------------------------------------------------
+  #region MATH -----------------------------------------------------------------
 
   // clamp a value
   public static int Clamp(int value, int min, int max)
@@ -79,8 +79,9 @@ public static class Lib
     return a * (1.0 - k) + b * k;
   }
 
+    #endregion
 
-  // --- RANDOM ---------------------------------------------------------------
+  #region RANDOM ---------------------------------------------------------------
 
   // store the random number generator
   static System.Random rng = new System.Random();
@@ -113,8 +114,9 @@ public static class Lib
     return (float)fast_float_seed * 4.6566129e-010f;
   }
 
+    #endregion
 
-  // --- HASH -----------------------------------------------------------------
+  #region HASH -----------------------------------------------------------------
 
   // combine two guid, irregardless of their order (eg: Combine(a,b) == Combine(b,a))
   public static Guid CombineGuid(Guid a, Guid b)
@@ -156,8 +158,9 @@ public static class Lib
     return h;
   }
 
+    #endregion
 
-  // --- TIME -----------------------------------------------------------------
+  #region TIME -----------------------------------------------------------------
 
   // return hours in a day
   public static double HoursInDay()
@@ -200,12 +203,10 @@ public static class Lib
     return (double)clocks * 1000000.0 / (double)Stopwatch.Frequency;
   }
 
-
   public static double Milliseconds(UInt64 clocks)
   {
     return (double)clocks * 1000.0 / (double)Stopwatch.Frequency;
   }
-
 
   public static double Seconds(UInt64 clocks)
   {
@@ -248,15 +249,15 @@ public static class Lib
   {
     return ((int)Time.realtimeSinceStartup / seconds) % elements;
   }
+    #endregion
 
+  #region REFLECTION -----------------------------------------------------------
 
-  // --- REFLECTION -----------------------------------------------------------
-
-  // return a value from a module using reflection
-  // note: useful when the module is from another assembly, unknown at build time
-  // note: useful when the value isn't persistent
-  // note: this function break hard when external API change, by design
-  public static T ReflectionValue<T>(PartModule m, string value_name)
+    // return a value from a module using reflection
+    // note: useful when the module is from another assembly, unknown at build time
+    // note: useful when the value isn't persistent
+    // note: this function break hard when external API change, by design
+    public static T ReflectionValue<T>(PartModule m, string value_name)
   {
     BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
     return (T)m.GetType().GetField(value_name, flags).GetValue(m);
@@ -280,8 +281,9 @@ public static class Lib
     return field.GetValue(instance) as T;
   }
 
+    #endregion
 
-  // --- STRING ---------------------------------------------------------------
+  #region STRING ---------------------------------------------------------------
 
   // return string limited to len, with ... at the end
   public static string Ellipsis(string s, uint len)
@@ -328,13 +330,11 @@ public static class Lib
     return s.Length > 0 ? char.ToUpper(s[0]) + s.Substring(1) : string.Empty;
   }
 
-
   // return string with specified color if condition evaluate to true
   public static string Color(string s, bool cond, string clr)
   {
     return !cond ? s : BuildString("<color=", clr, ">", s, "</color>");
   }
-
 
   // add spaces on caps
   public static string SpacesOnCaps(string s)
@@ -342,22 +342,20 @@ public static class Lib
     return System.Text.RegularExpressions.Regex.Replace(s, "[A-Z]", " $0").TrimStart();
   }
 
-
   // convert to smart_case
   public static string SmartCase(string s)
   {
     return SpacesOnCaps(s).ToLower().Replace(' ', '_');
   }
 
-
   // select a string at random
   public static string TextVariant(params string[] list)
   {
     return list.Length == 0 ? string.Empty : list[RandomInt(list.Length)];
   }
+    #endregion
 
-
-  // --- BUILD STRING ---------------------------------------------------------
+  #region BUILD STRING ---------------------------------------------------------
 
   // compose a set of strings together, without creating temporary objects
   // note: the objective here is to minimize number of temporary variables for GC
@@ -440,8 +438,9 @@ public static class Lib
     return sb.ToString();
   }
 
+    #endregion
 
-  // --- HUMAN READABLE -------------------------------------------------------
+  #region HUMAN READABLE -------------------------------------------------------
 
   // pretty-print a resource rate
   // - rate: rate per second, must be positive
@@ -604,15 +603,14 @@ public static class Lib
     return rate < 0.000001 ? "none" : Lib.BuildString(HumanReadableDataSize(rate), "/s");
   }
 
-
   // format science credits
   public static string HumanReadableScience(double value)
   {
     return Lib.BuildString("<color=cyan>", value.ToString("F1"), " CREDITS</color>");
   }
+    #endregion
 
-
-  // --- GAME LOGIC -----------------------------------------------------------
+  #region GAME LOGIC -----------------------------------------------------------
 
   // return true if the current scene is flight
   public static bool IsFlight()
@@ -656,9 +654,9 @@ public static class Lib
     }
     return false;
   }
+    #endregion
 
-
-  // --- BODY -----------------------------------------------------------------
+  #region BODY -----------------------------------------------------------------
 
   // return reference body of the planetary system that contain the specified body
   public static CelestialBody PlanetarySystem(CelestialBody body)
@@ -694,8 +692,9 @@ public static class Lib
     return (pos - body.position).magnitude - pqs.GetSurfaceHeight(radial);
   }
 
+  #endregion
 
-  // --- VESSEL ---------------------------------------------------------------
+  #region VESSEL ---------------------------------------------------------------
 
   // return true if landed somewhere
   public static bool Landed(Vessel v)
@@ -703,7 +702,6 @@ public static class Lib
     if (v.loaded) return v.Landed || v.Splashed;
     else return v.protoVessel.landed || v.protoVessel.splashed;
   }
-
 
   // return vessel position
   public static Vector3d VesselPosition(Vessel v)
@@ -735,13 +733,11 @@ public static class Lib
     return pos;
   }
 
-
   // return set of crew on a vessel
   public static List<ProtoCrewMember> CrewList(Vessel v)
   {
     return v.loaded ? v.GetVesselCrew() : v.protoVessel.GetVesselCrew();
   }
-
 
   // return crew count of a vessel
   public static int CrewCount(Vessel v)
@@ -767,7 +763,6 @@ public static class Lib
       return capacity;
     }
   }
-
 
   // return true if this is a 'vessel'
   public static bool IsVessel(Vessel v)
@@ -813,8 +808,9 @@ public static class Lib
       : v.protoVessel.protoPartSnapshots[v.protoVessel.rootIndex].flightID;
   }
 
+  #endregion
 
-  // --- PART -----------------------------------------------------------------
+  #region PART -----------------------------------------------------------------
 
   // get list of parts recursively, useful from the editors
   public static List<Part> GetPartsRecursively(Part root)
@@ -855,7 +851,6 @@ public static class Lib
     return 2.0 * (a * b + a * c + b * c) * 0.95493;
   }
 
-
   // return true if a part is manned, even in the editor
   public static bool IsManned(Part p)
   {
@@ -869,8 +864,9 @@ public static class Lib
     return part_manifest != null && part_manifest.AnySeatTaken();
   }
 
+  #endregion
 
-  // --- MODULE ---------------------------------------------------------------
+  #region MODULE ---------------------------------------------------------------
 
   // return all modules implementing a specific type in a vessel
   // note: disabled modules are not returned
@@ -968,7 +964,6 @@ public static class Lib
     return null;
   }
 
-
   // return a module from a part by name, or null if it doesn't exist
   public static T FindModuleAs<T>(Part p, string module_name) where T : class
   {
@@ -1015,8 +1010,9 @@ public static class Lib
     return data.index < data.prefabs.Count ? data.prefabs[data.index++] : null;
   }
 
+  #endregion
 
-  // --- RESOURCE -------------------------------------------------------------
+  #region RESOURCE -------------------------------------------------------------
 
   // return amount of a resource in a part
   public static double Amount(Part part, string resource_name, bool ignore_flow=false)
@@ -1132,7 +1128,6 @@ public static class Lib
     res.amount = Math.Min(res.amount, capacity);
   }
 
-
   // set flow of a resource in the specified part
   // do nothing if the resource don't exist in the part
   public static void SetResourceFlow(Part p, string res_name, bool enable)
@@ -1146,7 +1141,6 @@ public static class Lib
     }
   }
 
-
   // return the definition of a resource, or null if it doesn't exist
   public static PartResourceDefinition GetDefinition(string name)
   {
@@ -1156,7 +1150,6 @@ public static class Lib
     // return the resource definition, or null if it doesn't exist
     return reslib.Contains(name) ? reslib[name] : null;
   }
-
 
   // return name of propellant use in eva
   public static string EvaPropellantName()
@@ -1171,7 +1164,6 @@ public static class Lib
     return m.propellantResourceName;
   }
 
-
   // return capacify of propellant in eva
   public static double EvaPropellantCapacity()
   {
@@ -1182,8 +1174,9 @@ public static class Lib
     return p.Resources.Count == 0 ? 0.0 : p.Resources[0].maxAmount;
   }
 
+  #endregion
 
-  // --- SCIENCE DATA ---------------------------------------------------------
+  #region SCIENCE DATA ---------------------------------------------------------
 
   // return true if there is experiment data on the vessel
   public static bool HasData(Vessel v)
@@ -1271,8 +1264,9 @@ public static class Lib
     }
   }
 
+  #endregion
 
-  // -- TECH ------------------------------------------------------------------
+  #region TECH ------------------------------------------------------------------
 
   // return true if the tech has been researched
   public static bool HasTech(string tech_id)
@@ -1299,8 +1293,9 @@ public static class Lib
     return n;
   }
 
+  #endregion
 
-  // --- ASSETS ---------------------------------------------------------------
+  #region ASSETS ---------------------------------------------------------------
 
   // return path of directory containing the DLL
   public static string Directory()
@@ -1348,9 +1343,9 @@ public static class Lib
     return mat;
   }
 
+  #endregion
 
-
-  // --- CONFIG ---------------------------------------------------------------
+  #region CONFIG ---------------------------------------------------------------
 
   // get a config node from the config system
   public static ConfigNode ParseConfig(string path)
@@ -1392,8 +1387,9 @@ public static class Lib
     }
   }
 
+  #endregion
 
-  // --- UI -------------------------------------------------------------------
+  #region UI -------------------------------------------------------------------
 
   // return true if last GUILayout element was clicked
   public static bool IsClicked(int button=0)
@@ -1439,7 +1435,6 @@ public static class Lib
     return Lib.BuildString("<b>", title, "</b>: ", status);
   }
 
-
   // show a modal popup window where the user can choose among two options
   public static PopupDialog Popup(string title, string msg, DialogGUIBase one, DialogGUIBase two)
   {
@@ -1455,8 +1450,9 @@ public static class Lib
     );
   }
 
+  #endregion
 
-  // --- PROTO ----------------------------------------------------------------
+  #region PROTO ----------------------------------------------------------------
 
   public static class Proto
   {
@@ -1503,6 +1499,7 @@ public static class Lib
     }
   }
 
+  #endregion
 
   public static class Parse
   {
@@ -1531,7 +1528,4 @@ public static class Lib
     }
   }
 }
-
-
 } // KERBALISM
-

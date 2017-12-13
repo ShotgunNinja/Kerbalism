@@ -25,9 +25,9 @@
     public string targetState = "";
     public bool isPlaying;
 
-    public override void OnActive()
-    {
-      thisModule = "LadderDeploy";
+		public override void OnStart(StartState state)
+		{
+			if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
       ladder = part.FindModuleImplementing<RetractableLadder>();
       if (ladder != null)
       {
@@ -35,7 +35,7 @@
       }
     }
 
-    public override bool IsActive
+    public override bool IsDoingAction
     {
       get
       {

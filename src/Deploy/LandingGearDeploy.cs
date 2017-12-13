@@ -6,13 +6,13 @@ namespace KERBALISM
   {
     ModuleWheelDeployment gear;
 
-    public override void OnActive()
-    {
-      thisModule = "LandingGearDeploy";
+		public override void OnStart(StartState state)
+		{
+			if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
       gear = part.FindModuleImplementing<ModuleWheelDeployment>();
     }
 
-    public override bool IsActive
+    public override bool IsDoingAction
     {
       get
       {

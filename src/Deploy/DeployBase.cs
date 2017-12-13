@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace KERBALISM
 {
@@ -21,36 +23,27 @@ namespace KERBALISM
     [KSPField(guiName = "EC Usage", guiUnits = "/sec", guiActive = true, guiFormat = "F2")]
     public double actualECCost = 0;
 
-    // I check if vessel has EC to consume, otherwise will disable animations and functions of the part.
+    // Check if vessel has EC to consume, otherwise will disable animations and functions of the part.
     public bool hasEC;
 
-    public string thisModule;
-
-    public bool FixGame(string module)
-    {
-      if (!Features.Deploy)
-      {
-        PartModule thisModule = Lib.FindModule(part, module);
-        if (thisModule != null)
-        {
-          bool isActive = IsActive;
-          part.RemoveModule(thisModule);
-        }
-        return true;
-      }
-      return false;
-    }
+    // When it is consuming EC
+    public bool isActive;
 
     public virtual void Update()
     {
-      FixGame(thisModule);
       hasEC = ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
+      isActive = IsDoingAction;
+      // Review Lib.ReflectionValue to implement here
+      BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+      // https://stackoverflow.com/questions/23809183/get-custom-attributes-from-an-c-sharp-event
+      //GetType().GetEvent("Toggle",flags)
+      //EventAttributes t= GetType().GetEvent("Teste").Attributes;
     }
 
     public virtual void FixedUpdate()
     {
       part.ModulesOnUpdate();
-      if (IsActive)
+      if (IsDoingAction)
       {
         // get resource cache
         vessel_resources resources = ResourceCache.Get(part.vessel);
@@ -59,6 +52,6 @@ namespace KERBALISM
       else actualECCost = 0;
     }
 
-    public abstract bool IsActive { get; }
+    public abstract bool IsDoingAction { get; }
   }
 }

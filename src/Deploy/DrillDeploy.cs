@@ -7,7 +7,6 @@
     public override void OnStart(StartState state)
     {
       if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
-      thisModule = "DrillDeploy";
       mining = part.FindModuleImplementing<ModuleAnimationGroup>();
       foreach (PartModule pModule in part.FindModulesImplementing<Harvester>())
       {
@@ -23,7 +22,7 @@
         mining.Events["DeployModule"].guiActive = mining.Events["DeployModule"].guiActiveUnfocused = !mining.isDeployed && hasEC;
 
         part.ModulesOnUpdate();
-        if (IsActive)
+        if (IsDoingAction)
         {
           // get resource cache
           if (harvester != null)
@@ -42,7 +41,7 @@
       }
     }
 
-    public override bool IsActive
+    public override bool IsDoingAction
     {
       get
       {

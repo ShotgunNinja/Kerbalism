@@ -5,14 +5,14 @@
     ModuleAnimateGeneric lights1;
     ModuleColorChanger lights2;
 
-    public override void OnActive()
-    {
-      thisModule = "LightsDeploy";
+		public override void OnStart(StartState state)
+		{
+			if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
       lights1 = part.FindModuleImplementing<ModuleAnimateGeneric>();
       lights2 = part.FindModuleImplementing<ModuleColorChanger>();
     }
 
-    public override bool IsActive
+    public override bool IsDoingAction
     {
       get
       {
