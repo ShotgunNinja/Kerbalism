@@ -5,7 +5,7 @@
     ModuleAnimateGeneric lights1;
     ModuleColorChanger lights2;
 
-    public override void Start()
+    public override void OnActive()
     {
       thisModule = "LightsDeploy";
       lights1 = part.FindModuleImplementing<ModuleAnimateGeneric>();

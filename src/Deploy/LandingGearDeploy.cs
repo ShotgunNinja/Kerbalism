@@ -6,7 +6,7 @@ namespace KERBALISM
   {
     ModuleWheelDeployment gear;
 
-    public override void Start()
+    public override void OnActive()
     {
       thisModule = "LandingGearDeploy";
       gear = part.FindModuleImplementing<ModuleWheelDeployment>();

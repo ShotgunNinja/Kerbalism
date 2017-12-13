@@ -54,8 +54,8 @@ public sealed class Antenna : PartModule, ISpecifics, IAnimatedModule, IScienceD
         extended = anim.isDeployed;
 
         // allow extending/retracting even when vessel is not controllable
-        anim.Events["DeployModule"].guiActiveUncommand = true;
-        anim.Events["RetractModule"].guiActiveUncommand = true;
+        anim.Events["DeployModule"].guiActiveUncommand = Settings.UnlinkedControl == UnlinkedCtrl.full; 
+        anim.Events["RetractModule"].guiActiveUncommand = Settings.UnlinkedControl == UnlinkedCtrl.full; 
       }
     }
   }
