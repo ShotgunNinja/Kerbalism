@@ -31,25 +31,26 @@ namespace KERBALISM
 
     public virtual void Update()
     {
-      hasEC = ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
-      isActive = IsDoingAction;
-      // Review Lib.ReflectionValue to implement here
-      BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-      // https://stackoverflow.com/questions/23809183/get-custom-attributes-from-an-c-sharp-event
-      //GetType().GetEvent("Toggle",flags)
-      //EventAttributes t= GetType().GetEvent("Teste").Attributes;
+      if (Lib.IsFlight())
+      {
+        hasEC = ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
+        isActive = IsDoingAction;
+      }
     }
 
     public virtual void FixedUpdate()
     {
-      part.ModulesOnUpdate();
-      if (IsDoingAction)
+      if (Lib.IsFlight())
       {
-        // get resource cache
-        vessel_resources resources = ResourceCache.Get(part.vessel);
-        resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+        part.ModulesOnUpdate();
+        if (IsDoingAction)
+        {
+          // get resource cache
+          vessel_resources resources = ResourceCache.Get(part.vessel);
+          resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+        }
+        else actualECCost = 0;
       }
-      else actualECCost = 0;
     }
 
     public abstract bool IsDoingAction { get; }

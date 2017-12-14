@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace KERBALISM
+﻿namespace KERBALISM
 {
   // This class will support two signal system (Kerbalism Signal & CommNet)
   public class AntennaDeploy : DeployBase
@@ -12,39 +10,45 @@ namespace KERBALISM
     ModuleDeployableAntenna stockAnim;
 
     // When is consuming EC
+    // Show value on part Display
+    [KSPField(guiName = "Transmitting", guiUnits = "", guiActive = true, guiFormat = "")]
     bool isTransmitting;
+    [KSPField(guiName = "Moving", guiUnits = "", guiActive = true, guiFormat = "")]
     bool isMoving;
+
+    // Show value on part Display
+    [KSPField(guiName = "EC Usage", guiUnits = "/sec", guiActive = true, guiFormat = "F2")]
+    public double antennaCost;
 
     public override void OnStart(StartState state)
     {
-      // Do nothing on Editor/PreLaunch
-      if (state == StartState.Editor && state == StartState.PreLaunch) return;
-      if (Lib.IsFlight())
+      if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
+
+      // Kerbalism modules
+      antenna = part.FindModuleImplementing<Antenna>();
+      customAnim = part.FindModuleImplementing<ModuleAnimationGroup>();
+      // KSP modules
+      transmitter = part.FindModuleImplementing<ModuleDataTransmitter>();
+      stockAnim = part.FindModuleImplementing<ModuleDeployableAntenna>();
+
+      // I'm using the antennaModule to save distance & extend, this works for 2 purpose. 
+      //  First: When someone disable CommNet, Kerbalism antenna will work fine until extend is saved
+      //  Second:	CommNet verify if transmitter.canComm == (isdeploy || moduleisActive)
+      //    when the transmitter dosn't has deploy(is fixed), the only way to disable the connection is Setting distance to 0 when no EC, forcing CommNet lost connection.
+      if (antenna != null && transmitter != null)
       {
-        // Kerbalism modules
-        antenna = part.FindModuleImplementing<Antenna>();
-        customAnim = part.FindModuleImplementing<ModuleAnimationGroup>();
-        // KSP modules
-        transmitter = part.FindModuleImplementing<ModuleDataTransmitter>();
-        stockAnim = part.FindModuleImplementing<ModuleDeployableAntenna>();
+        antenna.isEnabled = Features.Signal;
+        antenna.moduleIsEnabled= Features.Signal;
+        transmitter.isEnabled = !Features.Signal;
+      }
 
-        // I'm using the antennaModule to save distance & extend, this works for 2 purpose. 
-        //  First: When someone disable CommNet, Kerbalism antenna will work fine until extend is saved
-        //  Second:	CommNet verify if transmitter.canComm == (isdeploy || moduleisActive)
-        //    when the transmitter dosn't has deploy(is fixed), the only way to disable the connection is Setting distance to 0 when no EC, forcing CommNet lost connection.
-        if (transmitter != null) transmitter.isEnabled = !Features.Signal;
-        if (stockAnim != null) stockAnim.isEnabled = !Features.Signal;
+      if (customAnim != null && stockAnim != null)
+      {
+        antenna.extended = customAnim.isDeployed;
+        customAnim.isEnabled = Features.Signal;
+        customAnim.moduleIsEnabled = Features.Signal;
 
-        if (antenna != null) antenna.isEnabled = Features.Signal;
-        if (customAnim != null)
-        {
-          antenna.extended = customAnim.isDeployed;
-          customAnim.isEnabled = Features.Signal;
-        }
-        else
-        {
-          antenna.extended = true;
-        }
+        stockAnim.isEnabled = !Features.Signal;
       }
     }
 
@@ -58,11 +62,17 @@ namespace KERBALISM
           vessel_info vi = Cache.VesselInfo(part.vessel);
           if (Cache.HasVesselInfo(part.vessel, out vi)) isTransmitting = (vi.transmitting.Length > 0 || vi.relaying.Length > 0);
 
-          if (isActive)
+          if (!isTransmitting) antennaCost = antenna.cost;
+          else antennaCost = 0;
+
+          if (IsDoingAction)
           {
             part.ModulesOnUpdate();
             vessel_resources resources = ResourceCache.Get(part.vessel);
-            if (!isTransmitting || isMoving) resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+            if (isMoving || !isTransmitting)
+            {
+              resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+            }
             else
             {
               // Just show the value on screen for module, but not consume
@@ -88,27 +98,42 @@ namespace KERBALISM
             // Update values of stock Modules
             // This way you are able to Disable\Enable SignalSystem without break the game.
             stockAnim.deployState = (customAnim.isDeployed ? ModuleDeployablePart.DeployState.EXTENDED : ModuleDeployablePart.DeployState.RETRACTED);
+            stockAnim.isEnabled = false;
           }
 
           if (hasEC)
           {
             if (customAnim != null)
             {
-              // Allow extending/retracting when has ec
-              customAnim.Events["DeployModule"].active = true;
-              customAnim.Events["RetractModule"].active = true;
-
               antenna.extended = customAnim.isDeployed;
 
               // Add cost to Extending/Retracting
               if (customAnim.DeployAnimation.isPlaying)
               {
+                // Don't show Event when is doing extending/retracting event
+                stockAnim.Events["RetractModule"].guiActive = false;
+                stockAnim.Events["RetractModule"].guiActiveUncommand = false;
+                stockAnim.Events["RetractModule"].guiActiveUnfocused = false;
+
+                stockAnim.Events["DeployModule"].guiActive = false;
+                stockAnim.Events["DeployModule"].guiActiveUncommand = false;
+                stockAnim.Events["DeployModule"].guiActiveUnfocused = false;
+
                 actualECCost = ecDeploy;
                 isMoving = true;
                 return true;
               }
               else if (customAnim.isDeployed)
               {
+                // Don't show Event when is doing extending/retracting event
+                stockAnim.Events["RetractModule"].guiActive = true;
+                stockAnim.Events["RetractModule"].guiActiveUncommand = true;
+                stockAnim.Events["RetractModule"].guiActiveUnfocused = true;
+
+                stockAnim.Events["DeployModule"].guiActive = false;
+                stockAnim.Events["DeployModule"].guiActiveUncommand = false;
+                stockAnim.Events["DeployModule"].guiActiveUnfocused = false;
+
                 actualECCost = ecCost;
                 isMoving = false;
                 return true;
@@ -117,6 +142,17 @@ namespace KERBALISM
               {
                 // if hit here, this means that antenna has animation but is not extended nor playing.
                 // no ecCost
+
+                // Don't show Event when is doing extending/retracting event
+                stockAnim.Events["RetractModule"].guiActive = false;
+                stockAnim.Events["RetractModule"].guiActiveUncommand = false;
+                stockAnim.Events["RetractModule"].guiActiveUnfocused = false;
+
+                stockAnim.Events["DeployModule"].guiActive = true;
+                stockAnim.Events["DeployModule"].guiActiveUncommand = true;
+                stockAnim.Events["DeployModule"].guiActiveUnfocused = true;
+
+
                 return false;
               }
             }
@@ -138,8 +174,13 @@ namespace KERBALISM
             if (customAnim != null)
             {
               // Don't allow extending/retracting when has no ec
-              customAnim.Events["DeployModule"].active = false;
-              customAnim.Events["RetractModule"].active = false;
+              stockAnim.Events["RetractModule"].guiActive = false;
+              stockAnim.Events["RetractModule"].guiActiveUncommand = false;
+              stockAnim.Events["RetractModule"].guiActiveUnfocused = false;
+
+              stockAnim.Events["DeployModule"].guiActive = false;
+              stockAnim.Events["DeployModule"].guiActiveUncommand = false;
+              stockAnim.Events["DeployModule"].guiActiveUnfocused = false;
             }
             return false;
           }
@@ -155,35 +196,59 @@ namespace KERBALISM
           {
             // Update values of Kerbalism Modules
             // This way you are able to Disable\Enable SignalSystem without break the game.
+            customAnim.isEnabled = false;
             customAnim.isDeployed = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
             antenna.extended = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
           }
           if (hasEC)
           {
-            // Recover antennaPower
-            transmitter.antennaPower = antenna.dist;
-
             if (stockAnim != null)
             {
               // Allow extending/retracting when has ec
-              stockAnim.Events["Extend"].active = true;
-              stockAnim.Events["Retract"].active = true;
 
               // Add cost to Extending/Retracting
               if (stockAnim.deployState == ModuleDeployablePart.DeployState.RETRACTING || stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDING)
               {
+                // Don't show Event when is doing extending/retracting event
+                stockAnim.Events["Retract"].guiActive = false;
+                stockAnim.Events["Retract"].guiActiveUncommand = false;
+                stockAnim.Events["Retract"].guiActiveUnfocused = false;
+
+                stockAnim.Events["Extend"].guiActive = false;
+                stockAnim.Events["Extend"].guiActiveUncommand = false;
+                stockAnim.Events["Extend"].guiActiveUnfocused = false;
+
                 actualECCost = ecDeploy;
                 isMoving = true;
                 return true;
               }
               else if (stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED)
               {
+                // Recover antennaPower only if antenna is Extended
+                transmitter.antennaPower = antenna.dist;
+
+                stockAnim.Events["Retract"].guiActive = true;
+                stockAnim.Events["Retract"].guiActiveUncommand = true;
+                stockAnim.Events["Retract"].guiActiveUnfocused = true;
+
+                stockAnim.Events["Extend"].guiActive = false;
+                stockAnim.Events["Extend"].guiActiveUncommand = false;
+                stockAnim.Events["Extend"].guiActiveUnfocused = false;
+
                 actualECCost = ecCost;
                 isMoving = false;
                 return true;
               }
               else
               {
+                stockAnim.Events["Retract"].guiActive = false;
+                stockAnim.Events["Retract"].guiActiveUncommand = false;
+                stockAnim.Events["Retract"].guiActiveUnfocused = false;
+
+                stockAnim.Events["Extend"].guiActive = true;
+                stockAnim.Events["Extend"].guiActiveUncommand = true;
+                stockAnim.Events["Extend"].guiActiveUnfocused = true;
+
                 // if hit here, this means that antenna has animation but is not extended nor playing.
                 // no ecCost
                 return false;
@@ -191,6 +256,8 @@ namespace KERBALISM
             }
             else
             {
+              // Recover antennaPower for fixed antenna
+              transmitter.antennaPower = antenna.dist;
               actualECCost = ecCost;
               isMoving = false;
               return true;
@@ -201,8 +268,13 @@ namespace KERBALISM
             if (stockAnim != null)
             {
               // Don't allow extending/retracting when has no ec
-              stockAnim.Events["Extend"].active = false;
-              stockAnim.Events["Retract"].active = false;
+              stockAnim.Events["Retract"].guiActive = false;
+              stockAnim.Events["Retract"].guiActiveUncommand = false;
+              stockAnim.Events["Retract"].guiActiveUnfocused = false;
+
+              stockAnim.Events["Extend"].guiActive = false;
+              stockAnim.Events["Extend"].guiActiveUncommand = false;
+              stockAnim.Events["Extend"].guiActiveUnfocused = false;
             }
             // Change the range to 0, causing CommNet to lose the signal
             transmitter.antennaPower = 0;
