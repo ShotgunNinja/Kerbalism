@@ -35,7 +35,7 @@
       }
     }
 
-    public override bool IsDoingAction
+    public override bool GetisConsuming
     {
       get
       {

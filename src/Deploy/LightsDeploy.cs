@@ -12,7 +12,7 @@
       lights2 = part.FindModuleImplementing<ModuleColorChanger>();
     }
 
-    public override bool IsDoingAction
+    public override bool GetisConsuming
     {
       get
       {

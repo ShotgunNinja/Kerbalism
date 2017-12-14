@@ -95,7 +95,7 @@ public sealed class Harvester : PartModule, IAnimatedModule, IModuleInfo, ISpeci
     }
     else
     {
-      if((running && ResourceCache.Info(part.vessel, "ElectricCharge").amount <= double.Epsilon) || (running && issue.Length > 0))
+      if(running && ResourceCache.Info(part.vessel, "ElectricCharge").amount <= double.Epsilon)
       {
         Toggle();
       }

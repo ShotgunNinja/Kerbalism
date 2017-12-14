@@ -22,7 +22,7 @@
         mining.Events["DeployModule"].guiActive = mining.Events["DeployModule"].guiActiveUnfocused = !mining.isDeployed && hasEC;
 
         part.ModulesOnUpdate();
-        if (IsDoingAction)
+        if (GetisConsuming)
         {
           // get resource cache
           if (harvester != null)
@@ -41,7 +41,7 @@
       }
     }
 
-    public override bool IsDoingAction
+    public override bool GetisConsuming
     {
       get
       {

@@ -12,7 +12,7 @@ namespace KERBALISM
       gear = part.FindModuleImplementing<ModuleWheelDeployment>();
     }
 
-    public override bool IsDoingAction
+    public override bool GetisConsuming
     {
       get
       {

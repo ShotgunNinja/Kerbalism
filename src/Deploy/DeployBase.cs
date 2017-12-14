@@ -8,51 +8,59 @@ namespace KERBALISM
   {
     public List<PartResourceDefinition> GetConsumedResources() => new List<PartResourceDefinition>() { PartResourceLibrary.Instance.GetDefinition("ElectricCharge") };
 
-    // Control Update
-    public double lastUpdated;
+    [KSPField] public double ecCost = 0;                              // ecCost to keep the part active
+    [KSPField] public double ecDeploy = 0;                            // ecCost to do a deploy(animation)
+    [KSPField(isPersistant = true)] public bool wasDeploySystem;            //  This identify if DeploySystem has disabled the function
 
-    // ecCost to keep the part active
-    [KSPField]
-    public double ecCost = 0;
-
-    // ecCost to do a deploy(animation)
-    [KSPField]
-    public double ecDeploy = 0;
-
-    // Show value on part Display
     [KSPField(guiName = "EC Usage", guiUnits = "/sec", guiActive = true, guiFormat = "F2")]
-    public double actualECCost = 0;
+    public double actualECCost = 0;                                   // Show EcConsume on part display
+    public bool hasEC;                                                // Check if vessel has EC to consume, otherwise will disable animations and functions of the part.
 
-    // Check if vessel has EC to consume, otherwise will disable animations and functions of the part.
-    public bool hasEC;
+    public resource_info resourceInfo;
+    public string CurrentModule;                                      // Used it to FixDeploySystem
+    public bool isConsuming;
 
-    // When it is consuming EC
-    public bool isActive;
+    public override void OnStart(StartState state)
+    {
+      base.OnStart(state);
+      CurrentModule = this.GetType().Name;
+      FixDeploySystem();
+    }
 
-    public virtual void Update()
+    public void Update()
     {
       if (Lib.IsFlight())
       {
-        hasEC = ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
-        isActive = IsDoingAction;
+        // get ec resource handler
+        resourceInfo = ResourceCache.Info(vessel, "ElectricCharge");
+        hasEC = resourceInfo.amount > double.Epsilon;
+
+        isConsuming = GetisConsuming;
       }
     }
 
     public virtual void FixedUpdate()
     {
       if (Lib.IsFlight())
-      {
-        part.ModulesOnUpdate();
-        if (IsDoingAction)
+      {       
+        part.ModulesOnUpdate();   // NEED TO FIX: I don't want to update the modules on FixedUpdate, but I need update it because, it is possible that IsDoingAction has changed the module
+
+        if (isConsuming)
         {
-          // get resource cache
-          vessel_resources resources = ResourceCache.Get(part.vessel);
-          resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+          resourceInfo.Consume(actualECCost * Kerbalism.elapsed_s);
         }
         else actualECCost = 0;
       }
     }
 
-    public abstract bool IsDoingAction { get; }
+    // Define when it is consuming EC
+    public abstract bool GetisConsuming { get; }
+
+    // Used to enable parts that was disable by DeploySystem
+    public virtual void FixDeploySystem()
+    {
+      PartModule pModule = Lib.FindModule(part, CurrentModule);
+      if(pModule!=null) part.RemoveModule(pModule);
+    }
   }
 }

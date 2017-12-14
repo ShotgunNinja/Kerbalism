@@ -19,16 +19,15 @@ public sealed class Antenna : PartModule, ISpecifics, IAnimatedModule, IScienceD
   [KSPField] public AntennaType type;      // type of antenna
   [KSPField] public double cost;           // cost of transmission in EC/s
   [KSPField] public double rate;           // transmission rate at zero distance in Mb/s
+  [KSPField] public double dist;           // max transmission distance in meters
 
   // persistence
-  [KSPField(isPersistant = true)] public double dist;   // max transmission distance in meters
   [KSPField(isPersistant=true)] public bool extended;   // true if the low-gain antenna can receive data from other vessels
   [KSPField(isPersistant=true)] public bool relay;      // true if the low-gain antenna can receive data from other vessels
 
   // utility to transmit data over time when science system is disabled
-  DataStream stream;
+  public DataStream stream { get; private set; }
   ScreenMessage progress_msg;
-
 
   public override void OnStart(StartState state)
   {

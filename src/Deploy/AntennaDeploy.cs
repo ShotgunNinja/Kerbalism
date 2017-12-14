@@ -9,82 +9,72 @@
     ModuleDataTransmitter transmitter;
     ModuleDeployableAntenna stockAnim;
 
+    [KSPField(isPersistant = true)] double rightDistValue;     // Need to support CommNet
+
     // When is consuming EC
     // Show value on part Display
-    [KSPField(guiName = "Transmitting", guiUnits = "", guiActive = true, guiFormat = "")]
+    [KSPField(guiName = "Transmitting",  guiUnits = "", guiActive = true, guiFormat = "")]
     bool isTransmitting;
+
     [KSPField(guiName = "Moving", guiUnits = "", guiActive = true, guiFormat = "")]
     bool isMoving;
 
     // Show value on part Display
-    [KSPField(guiName = "EC Usage", guiUnits = "/sec", guiActive = true, guiFormat = "F2")]
-    public double antennaCost;
+    [KSPField(guiName = "Transmission ecCost", guiUnits = "/sec", guiActive = true, guiFormat = "F2")]
+    double antennaCost;
 
     public override void OnStart(StartState state)
     {
+      base.OnStart(state);
       if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
 
       // Kerbalism modules
       antenna = part.FindModuleImplementing<Antenna>();
       customAnim = part.FindModuleImplementing<ModuleAnimationGroup>();
       // KSP modules
+      // I'm using this.dist to save transmitter.antennaPower.
+      //  CommNet - transmitter.canComm() = (isdeploy || moduleisActive)
+      //    When the transmitter has no deploy(is fixed), isdeploy= True, 
+      //    Then the only way to disable the connection for this transmitter type is setting distance to 0 when no EC, forcing CommNet lost connection.
+      //    When need enable back, take the information from this.dist
       transmitter = part.FindModuleImplementing<ModuleDataTransmitter>();
       stockAnim = part.FindModuleImplementing<ModuleDeployableAntenna>();
+    }
 
-      // I'm using the antennaModule to save distance & extend, this works for 2 purpose. 
-      //  First: When someone disable CommNet, Kerbalism antenna will work fine until extend is saved
-      //  Second:	CommNet verify if transmitter.canComm == (isdeploy || moduleisActive)
-      //    when the transmitter dosn't has deploy(is fixed), the only way to disable the connection is Setting distance to 0 when no EC, forcing CommNet lost connection.
-      if (antenna != null && transmitter != null)
-      {
-        antenna.isEnabled = Features.Signal;
-        antenna.moduleIsEnabled= Features.Signal;
-        transmitter.isEnabled = !Features.Signal;
-      }
-
-      if (customAnim != null && stockAnim != null)
-      {
-        antenna.extended = customAnim.isDeployed;
-        customAnim.isEnabled = Features.Signal;
-        customAnim.moduleIsEnabled = Features.Signal;
-
-        stockAnim.isEnabled = !Features.Signal;
-      }
+    public override void OnUpdate()
+    {
+      base.Update();
     }
 
     public override void FixedUpdate()
     {
       if (Lib.IsFlight())
       {
-        if (Features.Deploy)
+        if (Features.Signal)
         {
-          // get vessel info from the cache to verify if it is transmitting or relaying
-          vessel_info vi = Cache.VesselInfo(part.vessel);
-          if (Cache.HasVesselInfo(part.vessel, out vi)) isTransmitting = (vi.transmitting.Length > 0 || vi.relaying.Length > 0);
-
-          if (!isTransmitting) antennaCost = antenna.cost;
+          if (isTransmitting) antennaCost = antenna.cost;
           else antennaCost = 0;
-
-          if (IsDoingAction)
-          {
-            part.ModulesOnUpdate();
-            vessel_resources resources = ResourceCache.Get(part.vessel);
-            if (isMoving || !isTransmitting)
-            {
-              resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
-            }
-            else
-            {
-              // Just show the value on screen for module, but not consume
-              actualECCost = antenna.cost;
-            }
-          }
-          else actualECCost = 0;
         }
+
+        if (isConsuming)
+        {
+          part.ModulesOnUpdate();
+          vessel_resources resources = ResourceCache.Get(part.vessel);
+          if (isMoving || !isTransmitting)
+          {
+            resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+          }
+          else
+          {
+            // Just show the value on screen for module, but not consume
+            actualECCost = antennaCost;
+          }
+        }
+        else actualECCost = 0;
       }
     }
 
-    public override bool IsDoingAction
+    public override bool GetisConsuming
     {
       get
       {
@@ -93,46 +83,40 @@
           // Just to make sure that has the modules target
           if (antenna == null) return false;
 
-          if (customAnim != null)
-          {
-            // Update values of stock Modules
-            // This way you are able to Disable\Enable SignalSystem without break the game.
-            stockAnim.deployState = (customAnim.isDeployed ? ModuleDeployablePart.DeployState.EXTENDED : ModuleDeployablePart.DeployState.RETRACTED);
-            stockAnim.isEnabled = false;
-          }
-
           if (hasEC)
           {
             if (customAnim != null)
             {
-              antenna.extended = customAnim.isDeployed;
+              // Check if it is transmitting
+              if (antenna.stream.transmitting())
+              {
+                antennaCost = antenna.cost;
+                isTransmitting = true;
+              }
+              else
+              {
+                antennaCost = 0;
+                isTransmitting = false;
+              }
 
               // Add cost to Extending/Retracting
               if (customAnim.DeployAnimation.isPlaying)
               {
-                // Don't show Event when is doing extending/retracting event
-                stockAnim.Events["RetractModule"].guiActive = false;
-                stockAnim.Events["RetractModule"].guiActiveUncommand = false;
-                stockAnim.Events["RetractModule"].guiActiveUnfocused = false;
-
-                stockAnim.Events["DeployModule"].guiActive = false;
-                stockAnim.Events["DeployModule"].guiActiveUncommand = false;
-                stockAnim.Events["DeployModule"].guiActiveUnfocused = false;
-
                 actualECCost = ecDeploy;
                 isMoving = true;
                 return true;
               }
               else if (customAnim.isDeployed)
               {
-                // Don't show Event when is doing extending/retracting event
-                stockAnim.Events["RetractModule"].guiActive = true;
-                stockAnim.Events["RetractModule"].guiActiveUncommand = true;
-                stockAnim.Events["RetractModule"].guiActiveUnfocused = true;
-
-                stockAnim.Events["DeployModule"].guiActive = false;
-                stockAnim.Events["DeployModule"].guiActiveUncommand = false;
-                stockAnim.Events["DeployModule"].guiActiveUnfocused = false;
+                if (wasDeploySystem)
+                {
+                  customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = true;
+                  customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = false;
+                  // Leaving this the default game logic
+                  wasDeploySystem = false;
+                  // Makes antenna valid to AntennaInfo
+                  antenna.extended = true;
+                }
 
                 actualECCost = ecCost;
                 isMoving = false;
@@ -140,100 +124,68 @@
               }
               else
               {
-                // if hit here, this means that antenna has animation but is not extended nor playing.
-                // no ecCost
-
-                // Don't show Event when is doing extending/retracting event
-                stockAnim.Events["RetractModule"].guiActive = false;
-                stockAnim.Events["RetractModule"].guiActiveUncommand = false;
-                stockAnim.Events["RetractModule"].guiActiveUnfocused = false;
-
-                stockAnim.Events["DeployModule"].guiActive = true;
-                stockAnim.Events["DeployModule"].guiActiveUncommand = true;
-                stockAnim.Events["DeployModule"].guiActiveUnfocused = true;
-
-
+                // Antenna is retract.
+                if (wasDeploySystem)
+                {
+                  customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = false;
+                  customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = true;
+                  wasDeploySystem = false;
+                }
                 return false;
               }
             }
             else
             {
               // this means that antenna is fixed
-              // Make antenna valid to AntennaInfo
-              antenna.extended = true;
+              // Makes antenna valid to AntennaInfo
+              if (wasDeploySystem) antenna.extended = true;
               actualECCost = ecCost;
-              isMoving = false;
               return true;
             }
           }
           else
           {
-            // Make antenna not valid to AntennaInfo
-            antenna.extended = false;
-
             if (customAnim != null)
             {
               // Don't allow extending/retracting when has no ec
-              stockAnim.Events["RetractModule"].guiActive = false;
-              stockAnim.Events["RetractModule"].guiActiveUncommand = false;
-              stockAnim.Events["RetractModule"].guiActiveUnfocused = false;
-
-              stockAnim.Events["DeployModule"].guiActive = false;
-              stockAnim.Events["DeployModule"].guiActiveUncommand = false;
-              stockAnim.Events["DeployModule"].guiActiveUnfocused = false;
+              customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = false;
+              customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = false;
             }
+            // Makes antennaModule invalid to AntennaInfo
+            antenna.extended = false;
+            wasDeploySystem = true;
             return false;
           }
         }
-        else
+        else if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
         {
-          if (antenna == null && transmitter == null) return false;
+          if (transmitter == null) return false;
 
-          // Save antennaPower in Antenna Module
-          antenna.dist = (antenna.dist != transmitter.antennaPower && transmitter.antennaPower > 0 ? transmitter.antennaPower : antenna.dist);
+          // Save antennaPower
+          rightDistValue = (rightDistValue != transmitter.antennaPower && transmitter.antennaPower > 0 ? transmitter.antennaPower : rightDistValue);
 
-          if (stockAnim != null)
-          {
-            // Update values of Kerbalism Modules
-            // This way you are able to Disable\Enable SignalSystem without break the game.
-            customAnim.isEnabled = false;
-            customAnim.isDeployed = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
-            antenna.extended = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
-          }
           if (hasEC)
           {
             if (stockAnim != null)
             {
-              // Allow extending/retracting when has ec
-
               // Add cost to Extending/Retracting
               if (stockAnim.deployState == ModuleDeployablePart.DeployState.RETRACTING || stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDING)
               {
-                // Don't show Event when is doing extending/retracting event
-                stockAnim.Events["Retract"].guiActive = false;
-                stockAnim.Events["Retract"].guiActiveUncommand = false;
-                stockAnim.Events["Retract"].guiActiveUnfocused = false;
-
-                stockAnim.Events["Extend"].guiActive = false;
-                stockAnim.Events["Extend"].guiActiveUncommand = false;
-                stockAnim.Events["Extend"].guiActiveUnfocused = false;
-
                 actualECCost = ecDeploy;
                 isMoving = true;
                 return true;
               }
               else if (stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED)
               {
+                if (wasDeploySystem)
+                {
+                  stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = true;
+                  stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = false;
+                  // Leaving this the default game logic
+                  wasDeploySystem = false;
+                }
                 // Recover antennaPower only if antenna is Extended
-                transmitter.antennaPower = antenna.dist;
-
-                stockAnim.Events["Retract"].guiActive = true;
-                stockAnim.Events["Retract"].guiActiveUncommand = true;
-                stockAnim.Events["Retract"].guiActiveUnfocused = true;
-
-                stockAnim.Events["Extend"].guiActive = false;
-                stockAnim.Events["Extend"].guiActiveUncommand = false;
-                stockAnim.Events["Extend"].guiActiveUnfocused = false;
+                transmitter.antennaPower = rightDistValue;
 
                 actualECCost = ecCost;
                 isMoving = false;
@@ -241,23 +193,25 @@
               }
               else
               {
-                stockAnim.Events["Retract"].guiActive = false;
-                stockAnim.Events["Retract"].guiActiveUncommand = false;
-                stockAnim.Events["Retract"].guiActiveUnfocused = false;
-
-                stockAnim.Events["Extend"].guiActive = true;
-                stockAnim.Events["Extend"].guiActiveUncommand = true;
-                stockAnim.Events["Extend"].guiActiveUnfocused = true;
-
-                // if hit here, this means that antenna has animation but is not extended nor playing.
-                // no ecCost
+                // antenna is retract
+                if (wasDeploySystem)
+                {
+                  stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = false;
+                  stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = true;
+                  wasDeploySystem = false;
+                }
+                isMoving = false;
                 return false;
               }
             }
             else
             {
-              // Recover antennaPower for fixed antenna
-              transmitter.antennaPower = antenna.dist;
+              if (wasDeploySystem)
+              {
+                // Recover antennaPower for fixed antenna
+                transmitter.antennaPower = antenna.dist;
+                wasDeploySystem = false;
+              }
               actualECCost = ecCost;
               isMoving = false;
               return true;
@@ -268,19 +222,70 @@
             if (stockAnim != null)
             {
               // Don't allow extending/retracting when has no ec
-              stockAnim.Events["Retract"].guiActive = false;
-              stockAnim.Events["Retract"].guiActiveUncommand = false;
-              stockAnim.Events["Retract"].guiActiveUnfocused = false;
-
-              stockAnim.Events["Extend"].guiActive = false;
-              stockAnim.Events["Extend"].guiActiveUncommand = false;
-              stockAnim.Events["Extend"].guiActiveUnfocused = false;
+              stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = false;
+              stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = false;
             }
             // Change the range to 0, causing CommNet to lose the signal
             transmitter.antennaPower = 0;
+            wasDeploySystem = true;
             return false;
           }
         }
+        else return false;
+      }
+    }
+
+    public override void FixDeploySystem()
+    {
+      if (!Features.Deploy && wasDeploySystem)
+      {
+        if (Features.Signal)
+        {
+          if (customAnim != null)
+          {
+            if (customAnim.isDeployed)
+            {
+              customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = true;
+              customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = false;
+              // Makes antenna valid to AntennaInfo
+              antenna.extended = true;
+            }
+            else
+            {
+              // Antenna is retract.
+              customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = false;
+              customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = true;
+            }
+          }
+          else
+          {
+            // this means that antenna is fixed
+            // Makes antenna valid to AntennaInfo
+            antenna.extended = true;
+          }
+        }
+        else if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
+        {
+          // Recover antennaPower only if antenna is Extended
+          transmitter.antennaPower = rightDistValue;
+
+          if (stockAnim != null)
+          {
+            if (stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED)
+            {
+              stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = true;
+              stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = false;
+            }
+            else
+            {
+              // antenna is retract
+              stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = false;
+              stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = true;
+            }
+          }
+        }
+        // Leaving this the default game logic
+        wasDeploySystem = false;
       }
     }
   }
