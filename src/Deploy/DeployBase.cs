@@ -23,6 +23,7 @@ namespace KERBALISM
     public override void OnStart(StartState state)
     {
       base.OnStart(state);
+      Fields["actualECCost"].guiActive = Features.Deploy;
       CurrentModule = this.GetType().Name;
       FixDeploySystem();
     }
