@@ -11,12 +11,16 @@ public sealed class AntennaDevice : Device
   {
     this.antenna = antenna;
     animator = antenna.part.FindModuleImplementing<ModuleAnimationGroup>();
+    if (!Features.Deploy) has_ec = true;
+    else has_ec = ResourceCache.Info(antenna.part.vessel, "ElectricCharge").amount > double.Epsilon;
   }
 
   public AntennaDevice(ModuleDataTransmitter transmitter)
   {
     this.transmitter = transmitter;
     stockAnim = this.transmitter.part.FindModuleImplementing<ModuleDeployableAntenna>();
+    if(!Features.Deploy)has_ec = true;
+    has_ec = ResourceCache.Info(transmitter.part.vessel, "ElectricCharge").amount > double.Epsilon;
   }
 
   public override string name()
@@ -33,40 +37,30 @@ public sealed class AntennaDevice : Device
   public override string info()
   {
     if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
-    {
       return stockAnim == null
         ? "fixed"
         : stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED
+        ? has_ec
         ? "<color=cyan>deployed</color>"
+        : "<color=orange>inactive</color>"
         : "<color=red>retracted</color>";
-    }
     else
-        return animator == null
-      ? "fixed"
-      : antenna.extended
-      ? "<color=cyan>deployed</color>"
-      : "<color=red>retracted</color>";
+      return animator == null
+        ? "fixed"
+        : antenna.extended
+        ? has_ec
+        ? "<color=cyan>deployed</color>"
+        : "<color=orange>inactive</color>"
+        : "<color=red>retracted</color>";
   }
 
   public override void ctrl(bool value)
   {
     if (Features.Deploy)
     {
-        if (Features.Signal)
-        {
-          if (ResourceCache.Info(antenna.part.vessel, "ElectricCharge").amount <= double.Epsilon)
-          {
-            return;
-          }
-        }
-        else
-        {
-          if (ResourceCache.Info(stockAnim.part.vessel, "ElectricCharge").amount <= double.Epsilon)
-          {
-            return;
-          }
-        }
+      if (!has_ec) return;
     }
+
     if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
     {
       if (stockAnim.deployState != ModuleDeployablePart.DeployState.EXTENDED && value) stockAnim.Extend();
@@ -96,12 +90,16 @@ public sealed class AntennaDevice : Device
   ModuleAnimationGroup animator;
   ModuleDataTransmitter transmitter;
   ModuleDeployableAntenna stockAnim;
+  bool has_ec;
 }
 
 public sealed class ProtoAntennaDevice : Device
 {
   public ProtoAntennaDevice(ProtoPartModuleSnapshot antenna, uint part_id, Vessel v)
   {
+    if (!Features.Deploy) has_ec = true;
+    else has_ec = ResourceCache.Info(v, "ElectricCharge").amount > double.Epsilon;
+
     if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
     {
       this.antenna = FlightGlobals.FindProtoPartByID(part_id).FindModule("ModuleDataTransmitter");
@@ -129,31 +127,28 @@ public sealed class ProtoAntennaDevice : Device
   public override string info()
   {
     if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
-    {
-      return animator == null
+      return !has_ec
+       ? "<color=orange>inactive</color>"
+       : animator == null
        ? "fixed"
        : Lib.Proto.GetString(animator, "deployState") == "EXTENDED"
        ? "<color=cyan>deployed</color>"
        : "<color=red>retracted</color>";
-    }
     else
-    { 
-      return animator == null
-        ? "fixed"
-        : Lib.Proto.GetBool(antenna, "extended")
-        ? "<color=cyan>deployed</color>"
-        : "<color=red>retracted</color>";
-    }
+      return !has_ec
+       ? "<color=orange>inactive</color>"
+       : animator == null
+       ? "fixed"
+       : Lib.Proto.GetBool(antenna, "extended")
+       ? "<color=cyan>deployed</color>"
+       : "<color=red>retracted</color>";
   }
 
   public override void ctrl(bool value)
   {
     if (Features.Deploy)
     {
-      if (ResourceCache.Info(vessel, "ElectricCharge").amount <= double.Epsilon)
-      {
-        return;
-      }
+      if (!has_ec) return;
     }
 
     if (animator != null)
@@ -183,6 +178,7 @@ public sealed class ProtoAntennaDevice : Device
 
   ProtoPartModuleSnapshot antenna;
   ProtoPartModuleSnapshot animator;
+  bool has_ec;
 
   Vessel vessel;
   uint part_id;

@@ -9,11 +9,10 @@
     ModuleDataTransmitter transmitter;
     ModuleDeployableAntenna stockAnim;
 
-    [KSPField(isPersistant = true)] double rightDistValue;     // Need to support CommNet
+    [KSPField(isPersistant = true)] double rightDistValue;     // Needs to support CommNet
 
-    // When is consuming EC
+    // Extra condition to IsConsuming
     bool isTransmitting;
-    bool isMoving;
 
     public override void OnStart(StartState state)
     {
@@ -38,36 +37,24 @@
 
     public override void Update()
     {
-      if (Lib.IsFlight())
+      if (Lib.IsFlight() && Features.Signal)
       {
-        if (Features.Signal)
+        // Check if it is transmitting
+        if (!Features.Science) isTransmitting = antenna.stream.transmitting();
+        else
         {
-          // Check if it is transmitting
-          if (!Features.Science) isTransmitting = antenna.stream.transmitting();
-          else
-          {
-            // get info from the cache
-            vessel_info vi = Cache.VesselInfo(vessel);
-            // consume ec if data is transmitted or relayed
-            isTransmitting = (vi.transmitting.Length > 0 || vi.relaying.Length > 0);
-          }
+          // get info from the cache
+          vessel_info vi = Cache.VesselInfo(vessel);
+          // consume ec if data is transmitted or relayed
+          isTransmitting = (vi.transmitting.Length > 0 || vi.relaying.Length > 0);
         }
-        base.Update();
-        if (isTransmitting) actualECCost = antenna.cost;
-        else if(!isConsuming) actualECCost = 0;
-      }
-    }
 
-    public override void FixedUpdate()
-    {
-      if (Lib.IsFlight() && Features.Deploy)
-      {
-        if (isConsuming)
+        base.Update();
+        if (isTransmitting)
         {
-          if (isMoving || !isTransmitting)
-          {
-            base.FixedUpdate();
-          }
+          actualECCost = antenna.cost;
+          // Kerbalism already has logic to consume EC when it is transmitting
+          isConsuming = false;
         }
       }
     }
@@ -78,7 +65,7 @@
       {
         if (Features.Signal)
         {
-          // Just to make sure that has the modules target
+          // Just to make sure that has the module target
           if (antenna == null) return false;
 
           if (hasEC)
@@ -90,7 +77,6 @@
               if (customAnim.DeployAnimation.isPlaying)
               {
                 actualECCost = ecDeploy;
-                isMoving = true;
                 return true;
               }
               else if (customAnim.isDeployed)
@@ -101,14 +87,12 @@
                 // Makes antenna valid to AntennaInfo
                 antenna.extended = true;
                 actualECCost = ecCost;
-                isMoving = false;
                 return true;
               }
               else
               {
                 customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = false;
                 customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = true;
-                isMoving = false;
                 return false;
               }
             }
@@ -132,7 +116,6 @@
             }
             // Makes antennaModule invalid to AntennaInfo
             antenna.extended = false;
-            isMoving = false;
             return false;
           }
         }
@@ -152,7 +135,6 @@
               if (stockAnim.deployState == ModuleDeployablePart.DeployState.RETRACTING || stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDING)
               {
                 actualECCost = ecDeploy;
-                isMoving = true;
                 return true;
               }
               else if (stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED)
@@ -164,7 +146,6 @@
                 transmitter.antennaPower = rightDistValue;
 
                 actualECCost = ecCost;
-                isMoving = false;
                 return true;
               }
               else
@@ -172,8 +153,6 @@
                 // antenna is retract
                 stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = false;
                 stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = true;
-
-                isMoving = false;
                 return false;
               }
             }
@@ -183,7 +162,6 @@
               // Recover antennaPower for fixed antenna
               transmitter.antennaPower = antenna.dist;
               actualECCost = ecCost;
-              isMoving = false;
               return true;
             }
           }
@@ -213,19 +191,10 @@
         {
           if (customAnim != null)
           {
-            if (customAnim.isDeployed)
-            {
-              customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = true;
-              customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = false;
-              // Makes antenna valid to AntennaInfo
-              antenna.extended = true;
-            }
-            else
-            {
-              // Antenna is retract.
-              customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = false;
-              customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = true;
-            }
+            customAnim.Events["RetractModule"].guiActive = customAnim.Events["RetractModule"].guiActiveUncommand = customAnim.Events["RetractModule"].guiActiveUnfocused = customAnim.isDeployed;
+            customAnim.Events["DeployModule"].guiActive = customAnim.Events["DeployModule"].guiActiveUncommand = customAnim.Events["DeployModule"].guiActiveUnfocused = !customAnim.isDeployed;
+            // Makes antenna valid to AntennaInfo
+            antenna.extended = customAnim.isDeployed;
           }
           else
           {
@@ -241,21 +210,55 @@
 
           if (stockAnim != null)
           {
-            if (stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED)
+            bool isExtended = stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED;
+            stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = isExtended;
+            stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = !isExtended;
+          }
+        }
+        // Leaving with the default game logic
+        wasDeploySystem = false;
+      }
+    }
+
+    public static void BackgroundUpdate(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot antenna, vessel_info vi, resource_info ec, double elapsed_s)
+    {
+      if (Features.Deploy)
+      {
+        bool has_ec = ec.amount > double.Epsilon;
+
+        ProtoPartModuleSnapshot deployModule = p.FindModule("AntennaDeploy");
+
+        // if it is transmitting, leave with Kerbalism
+        if (Features.Science && (vi.transmitting.Length > 0 || vi.relaying.Length > 0)) return;
+
+        if (has_ec)
+        {
+          if (Features.Signal)
+          {
+            if (!Settings.ExtendedAntenna || Lib.Proto.GetBool(antenna, "extended"))
             {
-              stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = true;
-              stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = false;
+              ec.Consume(Lib.Proto.GetDouble(deployModule, "ecCost") * elapsed_s);
             }
-            else
+          }
+          else if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
+          {
+            if (Lib.Proto.GetBool(antenna, "canComm"))
             {
-              // antenna is retract
-              stockAnim.Events["Retract"].guiActive = stockAnim.Events["Retract"].guiActiveUncommand = stockAnim.Events["Retract"].guiActiveUnfocused = false;
-              stockAnim.Events["Extend"].guiActive = stockAnim.Events["Extend"].guiActiveUncommand = stockAnim.Events["Extend"].guiActiveUnfocused = true;
+              ec.Consume(Lib.Proto.GetDouble(deployModule, "ecCost") * elapsed_s);
             }
           }
         }
-        // Leaving this the default game logic
-        wasDeploySystem = false;
+        else
+        {
+          if (Features.Signal)
+          {
+            Lib.Proto.Set(antenna, "extended", false);
+          }
+          else if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
+          {
+            Lib.Proto.Set(antenna, "canComm",false);
+          }
+        }
       }
     }
   }
