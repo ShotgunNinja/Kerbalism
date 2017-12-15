@@ -218,6 +218,7 @@
         // Leaving with the default game logic
         wasDeploySystem = false;
       }
+      base.FixDeploySystem();
     }
 
     public static void BackgroundUpdate(Vessel v, ProtoPartSnapshot p, ProtoPartModuleSnapshot antenna, vessel_info vi, resource_info ec, double elapsed_s)

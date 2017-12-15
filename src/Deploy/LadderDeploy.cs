@@ -23,15 +23,21 @@
 
     // Controllers to know when the animation is playing
     public string targetState = "";
-    public bool isPlaying;
+    bool isPlaying;
 
-		public override void OnStart(StartState state)
-		{
-			if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
-      ladder = part.FindModuleImplementing<RetractableLadder>();
-      if (ladder != null)
+    public override void OnStart(StartState state)
+    {
+      base.OnStart(state);
+      if (Features.Deploy)
       {
-        ladder.isEnabled = false;
+        if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
+
+        ladder = part.FindModuleImplementing<RetractableLadder>();
+        if (ladder != null)
+        {
+          ladder.Events["Retract"].guiActive = ladder.Events["Retract"].guiActiveUnfocused = false;
+          ladder.Events["Extend"].guiActive = ladder.Events["Extend"].guiActiveUnfocused = false;
+        }
       }
     }
 
@@ -39,17 +45,16 @@
     {
       get
       {
-        // Update GUI
-        Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && isPlaying);
-        Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && isPlaying);
-
-        if (ladder != null)
+        if (Features.Deploy)
         {
-          if (!Features.Deploy)
-          {
-            ladder.isEnabled = true;
-            return false;
-          }
+          if (ladder == null) return false;
+
+          // Update GUI
+          Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && isPlaying);
+          Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && isPlaying);
+
+          // if no ec, DeploySystem will change the module.
+          wasDeploySystem = !hasEC;
 
           if (targetState == "") targetState = ladder.StateName;
 
@@ -59,8 +64,23 @@
             actualECCost = 0;
           }
           else actualECCost = ecDeploy;
+
+          return isPlaying;
         }
-        return isPlaying;
+        return false;
+      }
+    }
+
+    public override void FixDeploySystem()
+    {
+      if (!Features.Deploy && wasDeploySystem)
+      {
+        if (ladder != null)
+        {
+          ladder.Events["Retract"].guiActive = ladder.Events["Retract"].guiActiveUnfocused = ladder.StateName== "Extended";
+          ladder.Events["Extend"].guiActive = ladder.Events["Extend"].guiActiveUnfocused = ladder.StateName != "Extended";
+        }
+        base.FixDeploySystem();
       }
     }
   }
