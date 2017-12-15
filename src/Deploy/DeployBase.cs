@@ -10,7 +10,7 @@ namespace KERBALISM
 
     [KSPField] public double ecCost = 0;                              // ecCost to keep the part active
     [KSPField] public double ecDeploy = 0;                            // ecCost to do a deploy(animation)
-    [KSPField(isPersistant = true)] public bool wasDeploySystem;            //  This identify if DeploySystem has disabled the function
+    [KSPField(isPersistant = true)] public bool wasDeploySystem;      //  This identify if DeploySystem has disabled the function
 
     [KSPField(guiName = "EC Usage", guiUnits = "/sec", guiActive = true, guiFormat = "F2")]
     public double actualECCost = 0;                                   // Show EcConsume on part display
@@ -27,9 +27,9 @@ namespace KERBALISM
       FixDeploySystem();
     }
 
-    public void Update()
+    public virtual void Update()
     {
-      if (Lib.IsFlight())
+      if (Lib.IsFlight() && Features.Deploy)
       {
         // get ec resource handler
         resourceInfo = ResourceCache.Info(vessel, "ElectricCharge");
@@ -41,8 +41,8 @@ namespace KERBALISM
 
     public virtual void FixedUpdate()
     {
-      if (Lib.IsFlight())
-      {       
+      if (Lib.IsFlight() && Features.Deploy)
+      {
         part.ModulesOnUpdate();   // NEED TO FIX: I don't want to update the modules on FixedUpdate, but I need update it because, it is possible that IsDoingAction has changed the module
 
         if (isConsuming)
@@ -60,7 +60,7 @@ namespace KERBALISM
     public virtual void FixDeploySystem()
     {
       PartModule pModule = Lib.FindModule(part, CurrentModule);
-      if(pModule!=null) part.RemoveModule(pModule);
+      if (pModule != null) part.RemoveModule(pModule);
     }
   }
 }
