@@ -93,12 +93,9 @@ public sealed class Harvester : PartModule, IAnimatedModule, IModuleInfo, ISpeci
       recipe.Output(resource, rate * Kerbalism.elapsed_s, true);
       ResourceCache.Transform(vessel, recipe);
     }
-    else
+    else if(running && ResourceCache.Info(part.vessel, "ElectricCharge").amount <= double.Epsilon)
     {
-      if(running && ResourceCache.Info(part.vessel, "ElectricCharge").amount <= double.Epsilon)
-      {
-        Toggle();
-      }
+      Toggle();
     }
   }
 
