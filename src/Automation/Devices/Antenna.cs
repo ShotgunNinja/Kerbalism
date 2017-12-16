@@ -37,6 +37,7 @@ public sealed class AntennaDevice : Device
   public override string info()
   {
     if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
+    {
       return stockAnim == null
         ? "fixed"
         : stockAnim.deployState == ModuleDeployablePart.DeployState.EXTENDED
@@ -44,14 +45,17 @@ public sealed class AntennaDevice : Device
         ? "<color=cyan>deployed</color>"
         : "<color=orange>inactive</color>"
         : "<color=red>retracted</color>";
+    }
     else
+    {
       return animator == null
         ? "fixed"
-        : antenna.extended
+        : animator.isDeployed
         ? has_ec
         ? "<color=cyan>deployed</color>"
         : "<color=orange>inactive</color>"
         : "<color=red>retracted</color>";
+    }
   }
 
   public override void ctrl(bool value)
@@ -127,20 +131,20 @@ public sealed class ProtoAntennaDevice : Device
   public override string info()
   {
     if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
-      return !has_ec
-       ? "<color=orange>inactive</color>"
-       : animator == null
+      return animator == null
        ? "fixed"
        : Lib.Proto.GetString(animator, "deployState") == "EXTENDED"
+       ? has_ec
        ? "<color=cyan>deployed</color>"
+       : "<color=orange>inactive</color>"
        : "<color=red>retracted</color>";
     else
-      return !has_ec
-       ? "<color=orange>inactive</color>"
-       : animator == null
+      return animator == null
        ? "fixed"
-       : Lib.Proto.GetBool(antenna, "extended")
+       : Lib.Proto.GetBool(animator, "isDeployed")
+       ? has_ec
        ? "<color=cyan>deployed</color>"
+       : "<color=orange>inactive</color>"
        : "<color=red>retracted</color>";
   }
 

@@ -12,32 +12,21 @@
       {
         if (pModule.isEnabled) harvester = pModule as Harvester;
       }
+
+      if (mining != null) pModule = mining;
+      base.OnStart(state);
     }
 
-    public override void FixedUpdate()
+    public override void Update()
     {
-      if (mining != null)
+      if (Lib.IsFlight() && Features.Deploy)
       {
-        mining.Events["RetractModule"].guiActive = mining.Events["RetractModule"].guiActiveUnfocused = mining.isDeployed && hasEC;
-        mining.Events["DeployModule"].guiActive = mining.Events["DeployModule"].guiActiveUnfocused = !mining.isDeployed && hasEC;
-
-        part.ModulesOnUpdate();
-        if (GetisConsuming)
+        base.Update();
+        if (harvester.running)
         {
-          // get resource cache
-          if (harvester != null)
-          {
-            if (harvester.running)
-            {
-              // Just show the value on screen, but not consume
-              return;
-            }
-          }
-
-          vessel_resources resources = ResourceCache.Get(part.vessel);
-          resources.Consume(part.vessel, "ElectricCharge", actualECCost * Kerbalism.elapsed_s);
+          actualECCost = (float)harvester.ec_rate;
+          isConsuming = false;
         }
-        else actualECCost = 0;
       }
     }
 
@@ -45,30 +34,21 @@
     {
       get
       {
-        if (!Features.Deploy)
-        {
-          if (mining != null)
-          {
-            mining.Events["RetractModule"].guiActive = mining.Events["RetractModule"].guiActiveUnfocused = mining.isDeployed;
-            mining.Events["DeployModule"].guiActive = mining.Events["DeployModule"].guiActiveUnfocused = !mining.isDeployed;
-          }
-        }
+        // Just to make sure that has the module target
         if (mining != null)
         {
-          mining.isEnabled = true;
+          // Update GUI
+          mining.Events["RetractModule"].guiActive = mining.Events["RetractModule"].guiActiveUnfocused = mining.isDeployed && hasEC;
+          mining.Events["DeployModule"].guiActive = mining.Events["DeployModule"].guiActiveUnfocused = !mining.isDeployed && hasEC;
 
-          if (mining.ActiveAnimation.isPlaying && !harvester.running && hasEC)
+          ToggleActions(mining, hasEC);
+
+          if (mining.ActiveAnimation.isPlaying && hasEC)
           {
             actualECCost = ecDeploy;
             return true;
           }
-          else if (harvester.running)
-          {
-            actualECCost = (float)harvester.ec_rate;
-            return true;
-          }
         }
-        actualECCost = 0;
         return false;
       }
     }

@@ -25,19 +25,21 @@
     public string targetState = "";
     bool isPlaying;
 
+    [KSPField(guiName = "Status", guiUnits = "", guiActive = false, guiFormat = "")]
+    string moving = "Moving";
+
     public override void OnStart(StartState state)
     {
-      base.OnStart(state);
-      if (Features.Deploy)
-      {
-        if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
+      if (state == StartState.Editor && state == StartState.None && state == StartState.PreLaunch) return;
 
-        ladder = part.FindModuleImplementing<RetractableLadder>();
-        if (ladder != null)
-        {
-          ladder.Events["Retract"].guiActive = ladder.Events["Retract"].guiActiveUnfocused = false;
-          ladder.Events["Extend"].guiActive = ladder.Events["Extend"].guiActiveUnfocused = false;
-        }
+      ladder = part.FindModuleImplementing<RetractableLadder>();
+      if (ladder != null)
+      {
+        ladder.Events["Retract"].guiActive = ladder.Events["Retract"].guiActiveUnfocused = false;
+        ladder.Events["Extend"].guiActive = ladder.Events["Extend"].guiActiveUnfocused = false;
+        
+        pModule = ladder;
+        base.OnStart(state);
       }
     }
 
@@ -45,42 +47,26 @@
     {
       get
       {
-        if (Features.Deploy)
+        // Just making sure that we have the target module
+        if (ladder == null) return false;
+
+        // Update GUI
+        Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && !isPlaying);
+        Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && !isPlaying);
+        Fields["moving"].guiActive = isPlaying;
+
+        ToggleActions(ladder, hasEC);
+
+        if (targetState == "") targetState = ladder.StateName;
+
+        if (targetState == ladder.StateName)
         {
-          if (ladder == null) return false;
-
-          // Update GUI
-          Events["RetractLadder"].guiActive = Events["RetractLadder"].guiActiveUnfocused = (targetState != "Retracted" && hasEC && isPlaying);
-          Events["ExtendLadder"].guiActive = Events["ExtendLadder"].guiActiveUnfocused = (targetState == "Retracted" && hasEC && isPlaying);
-
-          // if no ec, DeploySystem will change the module.
-          wasDeploySystem = !hasEC;
-
-          if (targetState == "") targetState = ladder.StateName;
-
-          if (targetState == ladder.StateName)
-          {
-            isPlaying = false;
-            actualECCost = 0;
-          }
-          else actualECCost = ecDeploy;
-
-          return isPlaying;
+          isPlaying = false;
+          return false;
         }
-        return false;
-      }
-    }
 
-    public override void FixDeploySystem()
-    {
-      if (!Features.Deploy && wasDeploySystem)
-      {
-        if (ladder != null)
-        {
-          ladder.Events["Retract"].guiActive = ladder.Events["Retract"].guiActiveUnfocused = ladder.StateName== "Extended";
-          ladder.Events["Extend"].guiActive = ladder.Events["Extend"].guiActiveUnfocused = ladder.StateName != "Extended";
-        }
-        base.FixDeploySystem();
+        actualECCost = ecDeploy;
+        return isPlaying;
       }
     }
   }
