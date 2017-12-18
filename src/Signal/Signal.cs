@@ -279,7 +279,7 @@ public static class Signal
 
 
   static ConnectionInfo OtherComms(Vessel v)
-  {
+    {
     // hard-coded transmission rate and cost
     const double ext_rate = 0.064;
     const double ext_cost = 0.1;

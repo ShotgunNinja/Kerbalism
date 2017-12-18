@@ -12,6 +12,7 @@ public static class Features
     // set user-specified features
     Reliability = Settings.Reliability;
     Signal = Settings.Signal;
+    Deploy = Settings.Deploy;
     Science = Settings.Science;
     SpaceWeather = Settings.SpaceWeather;
     Automation = Settings.Automation;
@@ -55,6 +56,7 @@ public static class Features
     Lib.Log("features:");
     Lib.Log("- Reliability: " + Reliability);
     Lib.Log("- Signal: " + Signal);
+    Lib.Log("- Deploy: " + Deploy);
     Lib.Log("- Science: " + Science);
     Lib.Log("- SpaceWeather: " + SpaceWeather);
     Lib.Log("- Automation: " + Automation);
@@ -71,6 +73,7 @@ public static class Features
   // user-specified features
   public static bool Reliability;
   public static bool Signal;
+  public static bool Deploy;
   public static bool Science;
   public static bool SpaceWeather;
   public static bool Automation;

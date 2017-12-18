@@ -26,9 +26,8 @@ public sealed class Antenna : PartModule, ISpecifics, IAnimatedModule, IScienceD
   [KSPField(isPersistant=true)] public bool relay;      // true if the low-gain antenna can receive data from other vessels
 
   // utility to transmit data over time when science system is disabled
-  DataStream stream;
+  public DataStream stream { get; private set; }
   ScreenMessage progress_msg;
-
 
   public override void OnStart(StartState state)
   {
@@ -54,8 +53,8 @@ public sealed class Antenna : PartModule, ISpecifics, IAnimatedModule, IScienceD
         extended = anim.isDeployed;
 
         // allow extending/retracting even when vessel is not controllable
-        anim.Events["DeployModule"].guiActiveUncommand = true;
-        anim.Events["RetractModule"].guiActiveUncommand = true;
+        anim.Events["DeployModule"].guiActiveUncommand = Settings.UnlinkedControl == UnlinkedCtrl.full; 
+        anim.Events["RetractModule"].guiActiveUncommand = Settings.UnlinkedControl == UnlinkedCtrl.full; 
       }
     }
   }

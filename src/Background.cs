@@ -32,6 +32,7 @@ public static class Background
     FissionGenerator,
     RadioisotopeGenerator,
     CryoTank,
+    AntennaDeploy,
     Unknown
   }
 
@@ -64,7 +65,9 @@ public static class Background
       case "FissionGenerator":             return module_type.FissionGenerator;
       case "ModuleRadioisotopeGenerator":  return module_type.RadioisotopeGenerator;
       case "ModuleCryoTank":               return module_type.CryoTank;
-    }
+      case "ModuleDataTransmitter":        return module_type.AntennaDeploy;
+      case "Antenna":                      return module_type.AntennaDeploy;
+      }
     return module_type.Unknown;
   }
 
@@ -129,6 +132,7 @@ public static class Background
           case module_type.FissionGenerator:      ProcessFissionGenerator(v, p, m, module_prefab, ec, elapsed_s);                             break;
           case module_type.RadioisotopeGenerator: ProcessRadioisotopeGenerator(v, p, m, module_prefab, ec, elapsed_s);                        break;
           case module_type.CryoTank:              ProcessCryoTank(v, p, m, module_prefab, resources, elapsed_s);                              break;
+          case module_type.AntennaDeploy:         AntennaDeploy.BackgroundUpdate(v, p, m, vi, ec, elapsed_s);                                 break;
         }
       }
     }

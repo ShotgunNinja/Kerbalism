@@ -65,7 +65,7 @@ public sealed class Harvester : PartModule, IAnimatedModule, IModuleInfo, ISpeci
       issue = DetectIssue(abundance);
 
       // update ui
-      Events["Toggle"].guiActive = deployed;
+      Events["Toggle"].guiActive = deployed && ResourceCache.Info(part.vessel, "ElectricCharge").amount > double.Epsilon;
       Fields["Abundance"].guiActive = deployed;
       if (deployed)
       {
@@ -86,12 +86,16 @@ public sealed class Harvester : PartModule, IAnimatedModule, IModuleInfo, ISpeci
   {
     if (Lib.IsEditor()) return;
 
-    if (deployed && running && issue.Length == 0)
+    if (deployed && running && issue.Length == 0 && ResourceCache.Info(part.vessel, "ElectricCharge").amount> double.Epsilon)
     {
       resource_recipe recipe = new resource_recipe();
       recipe.Input("ElectricCharge", ec_rate * Kerbalism.elapsed_s);
       recipe.Output(resource, rate * Kerbalism.elapsed_s, true);
       ResourceCache.Transform(vessel, recipe);
+    }
+    else if(running && ResourceCache.Info(part.vessel, "ElectricCharge").amount <= double.Epsilon)
+    {
+      Toggle();
     }
   }
 

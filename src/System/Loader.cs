@@ -31,6 +31,7 @@ public sealed class Loader : LoadingSystem
     inject(root, "Profile", Lib.UppercaseFirst(Settings.Profile));
     if (Features.Reliability) inject(root, "Feature", "Reliability");
     if (Features.Signal) inject(root, "Feature", "Signal");
+    if (Features.Deploy) inject(root, "Feature", "Deploy");
     if (Features.SpaceWeather) inject(root, "Feature", "SpaceWeather");
     if (Features.Automation) inject(root, "Feature", "Automation");
     if (Features.Science) inject(root, "Feature", "Science");

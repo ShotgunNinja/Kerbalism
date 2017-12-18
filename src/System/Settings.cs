@@ -26,6 +26,7 @@ public static class Settings
     // user-defined features
     Reliability                 = Lib.ConfigValue(cfg, "Reliability",                 false);
     Signal                      = Lib.ConfigValue(cfg, "Signal",                      false);
+    Deploy                      = Lib.ConfigValue(cfg, "Deploy",                      false);
     Science                     = Lib.ConfigValue(cfg, "Science",                     false);
     SpaceWeather                = Lib.ConfigValue(cfg, "SpaceWeather",                false);
     Automation                  = Lib.ConfigValue(cfg, "Automation",                  false);
@@ -92,6 +93,7 @@ public static class Settings
   // user-defined features
   public static bool   Reliability;                       // component malfunctions and critical failures
   public static bool   Signal;                            // communications using low-gain and high-gain antennas
+  public static bool   Deploy;                            // add ecCost to keep Antenna working, add ecCost to Extend\Retract parts
   public static bool   Science;                           // science data storage, transmission and analysis
   public static bool   SpaceWeather;                      // coronal mass ejections
   public static bool   Automation;                        // control vessel components using scripts
