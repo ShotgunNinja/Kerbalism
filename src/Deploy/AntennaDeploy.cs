@@ -3,6 +3,7 @@
   // This class will support two signal system (Kerbalism Signal & CommNet)
   public class AntennaDeploy : DeployBase
   {
+    // This module is always exist in part that has Antenna Or ModuleDataTransmitter
     Antenna antenna;
     ModuleAnimationGroup customAnim;
 
@@ -47,11 +48,11 @@
       if (Lib.IsFlight() && Features.Signal && Features.Deploy)
       {
         // Check if it is transmitting
-        if (!Features.Science)
+        if (!Features.Science && Features.Signal)
         {
           if (antenna != null) isTransmitting = antenna.stream.transmitting();
         }
-        else
+        else if (Features.Science)
         {
           // get info from the cache
           vessel_info vi = Cache.VesselInfo(vessel);
@@ -62,9 +63,13 @@
         base.Update();
         if (isTransmitting)
         {
-          actualECCost = antenna.cost;
-          // Kerbalism already has logic to consume EC when it is transmitting
-          isConsuming = false;
+          if (Features.Signal) actualECCost = antenna.cost;
+          else if (HighLogic.fetch.currentGame.Parameters.Difficulty.EnableCommNet)
+          {
+            actualECCost = ecCost;  // No extra consume (Not until implement KCommNet)
+          }
+            // Kerbalism already has logic to consume EC when it is transmitting
+            isConsuming = false;
         }
       }
     }
@@ -175,7 +180,7 @@
             {
               ToggleActions(stockAnim, hasEC);
               // Recover antennaPower for fixed antenna
-              transmitter.antennaPower = antenna.dist;
+              transmitter.antennaPower = rightDistValue;
               actualECCost = ecCost;
               return true;
             }
